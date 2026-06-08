@@ -1,0 +1,169 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+enum VerifyStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum BookingStatus {
+  PENDING
+  ACCEPTED
+  COMPLETED
+  CANCELLED
+}
+
+enum TokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model User {
+  id               String           @id @default(uuid())
+  fullName         String
+  email            String           @unique
+  phoneNumber      String           @unique
+  passwordHash     String           @default("")
+  emailVerified    DateTime?
+  role             UserRole         @default(CUSTOMER)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  // Relations
+  customerBookings Booking[]        @relation("CustomerToBooking")
+  providerProfile  ProviderProfile?
+  reviewsWritten   Review[]         @relation("CustomerToReview")
+  notifications    Notification[]
+  verificationTokens VerificationToken[]
+}
+
+model VerificationToken {
+  id        String       @id @default(uuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String       @unique
+  purpose   TokenPurpose
+  expiresAt DateTime
+  createdAt DateTime     @default(now())
+
+  @@index([userId, purpose])
+}
+
+model ProviderProfile {
+  id                 String           @id @default(uuid())
+  userId             String           @unique
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio                String           @db.Text
+  categoryId         String
+  category           ServiceCategory  @relation(fields: [categoryId], references: [id])
+  verificationStatus VerifyStatus     @default(PENDING)
+
+  // Localized Verification Data (Phase 1 Local Trust Layer)
+  idNumber           String           // Stores NIN or BVN securely
+  selfieUrl          String
+  guarantorName      String
+  guarantorPhone     String
+
+  // Geospatial Discovery (Decimal formatted for radius matching)
+  latitude           Decimal          @db.Decimal(9, 6)
+  longitude          Decimal          @db.Decimal(9, 6)
+  operatingRadiusKm  Int              @default(10)
+
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  // Relations
+  jobsReceived       Booking[]        @relation("ProviderToBooking")
+  reviewsReceived    Review[]         @relation("ProviderToReview")
+
+  // ==========================================
+  // PHASE 2 DROP-IN PLACEHOLDERS (DO NOT UNCOMMENT IN PHASE 1)
+  // portfolioImages   PortfolioImage[]
+  // walletBalance     Decimal          @default(0.00)
+  // ==========================================
+}
+
+model ServiceCategory {
+  id          String            @id @default(uuid())
+  name        String            @unique
+  iconName    String            // Used for rendering shadcn/lucide UI icons dynamically
+  description String            @db.Text
+  providers   ProviderProfile[]
+  bookings    Booking[]
+}
+
+model Booking {
+  id          String        @id @default(uuid())
+  customerId  String
+  customer    User          @relation("CustomerToBooking", fields: [customerId], references: [id])
+  providerId  String
+  provider    ProviderProfile @relation("ProviderToBooking", fields: [providerId], references: [id])
+  categoryId  String
+  category    ServiceCategory @relation(fields: [categoryId], references: [id])
+
+  bookingDate DateTime
+  status      BookingStatus @default(PENDING)
+  notes       String        @db.Text
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  review      Review?
+
+  // ==========================================
+  // PHASE 2 PAYMENT PLACEHOLDERS
+  // paymentStatus   String   @default("UNPAID") // UNPAID, ESCROW, RELEASED, REFUNDED
+  // ==========================================
+}
+
+model Review {
+  id          String   @id @default(uuid())
+  bookingId   String   @unique
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    User     @relation("CustomerToReview", fields: [customerId], references: [id])
+  providerId  String
+  provider    ProviderProfile @relation("ProviderToReview", fields: [providerId], references: [id])
+
+  rating      Int      // 1 to 5 scale
+  comment     String   @db.Text
+  createdAt   DateTime @default(now())
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String
+  message    String   @db.Text
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+// ==========================================
+// PHASE 2 NEW MODELS (DO NOT BUILD IN PHASE 1)
+// model PortfolioImage {
+//   id          String          @id @default(uuid())
+//   providerId  String
+//   provider    ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+//   imageUrl    String
+//   createdAt   DateTime        @default(now())
+// }
+// ==========================================

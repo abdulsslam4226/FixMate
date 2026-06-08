@@ -1,0 +1,202 @@
+{
+  "name": "FixMate — Booking SLA Engine (Module 3.2-C)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fixmate-booking-sla",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "b1c2d3e4-0002-4000-8000-000000000001",
+      "name": "Booking Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 380],
+      "notes": "Receives the `booking.created` event from triggerBookingSLAWebhook() (backend/src/lib/n8n.ts) — payload: { booking: { id, providerId, customerId, bookingDate }, slaWindowHours: 2 }. Set N8N_BOOKING_WEBHOOK_URL in backend/.env to this node's Production URL.",
+      "webhookId": "fixmate-booking-sla"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.FIXMATE_API_URL }}/bookings/{{ $json.body.booking.id }}/mine",
+        "options": {}
+      },
+      "id": "b1c2d3e4-0002-4000-8000-000000000002",
+      "name": "Load Booking Details",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [420, 380],
+      "notes": "Placeholder for an internal lookup node. In Phase 1 the webhook payload alone is enough to compose the artisan ping (booking id + date); swap this for a real HTTP Request to your own admin-read endpoint if you need customer/provider names and phone numbers up front."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WHATSAPP_API_URL }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.WHATSAPP_API_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"to\": $json.providerPhoneNumber,\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"fixmate_new_job_request\",\n    \"language\": { \"code\": \"en\" },\n    \"components\": [\n      { \"type\": \"body\", \"parameters\": [\n        { \"type\": \"text\", \"text\": $('Booking Webhook').first().json.body.booking.id },\n        { \"type\": \"text\", \"text\": $('Booking Webhook').first().json.body.slaWindowHours + \" hours\" }\n      ] }\n    ]\n  }\n} }}",
+        "options": {}
+      },
+      "id": "b1c2d3e4-0002-4000-8000-000000000003",
+      "name": "Ping Artisan: New Job Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 380],
+      "notes": "Tells the artisan a customer is waiting and the SLA clock (slaWindowHours, currently 2h) has started. Wire `providerPhoneNumber` from your own lookup — the raw webhook payload only carries IDs, by design (Module 3.2-C keeps Express decoupled from PII fan-out)."
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('Booking Webhook').first().json.body.slaWindowHours }}",
+        "unit": "hours"
+      },
+      "id": "b1c2d3e4-0002-4000-8000-000000000004",
+      "name": "Wait for SLA Window",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [860, 380],
+      "webhookId": "b1c2d3e4-0002-4000-8000-00000000wait",
+      "notes": "Suspends the workflow execution for `slaWindowHours` (2h) without consuming a worker — n8n persists the paused state and resumes automatically. This is the actual '2-hour SLA' clock; Express never has to run a scheduler itself."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FIXMATE_API_URL }}/automation/bookings/{{ $('Booking Webhook').first().json.body.booking.id }}/expire",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-automation-secret", "value": "={{ $env.FIXMATE_AUTOMATION_SECRET }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1c2d3e4-0002-4000-8000-000000000005",
+      "name": "Check & Expire If Stale",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 380],
+      "notes": "Calls back into Express's POST /automation/bookings/:id/expire (backend/src/controllers/automation.controller.ts), guarded by N8N_AUTOMATION_SECRET. Express re-checks the deadline and current status server-side — it only flips PENDING→CANCELLED if the artisan genuinely never responded — and returns `{ expired, booking }` with both parties' names/numbers for the messages below."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "b1c2d3e4-0002-4000-8000-0000000cond1",
+              "leftValue": "={{ $json.expired }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1c2d3e4-0002-4000-8000-000000000006",
+      "name": "Was It Actually Cancelled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1300, 380],
+      "notes": "`expired: false` covers two harmless races: the artisan already accepted/declined (reason: already-actioned), or this execution resumed slightly early (reason: not-yet-due). Either way, no message should go out — only a genuine auto-cancel notifies anyone."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WHATSAPP_API_URL }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.WHATSAPP_API_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"to\": $json.booking.customer.phoneNumber,\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"fixmate_booking_expired_customer\",\n    \"language\": { \"code\": \"en\" },\n    \"components\": [\n      { \"type\": \"body\", \"parameters\": [\n        { \"type\": \"text\", \"text\": $json.booking.category.name },\n        { \"type\": \"text\", \"text\": $json.booking.provider.user.fullName }\n      ] }\n    ]\n  }\n} }}",
+        "options": {}
+      },
+      "id": "b1c2d3e4-0002-4000-8000-000000000007",
+      "name": "Notify Customer: Find Someone Else",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1520, 280],
+      "notes": "\"We couldn't reach {{provider}} for your {{category}} request in time — here are other verified artisans nearby.\" Fires only on the true branch, straight off the /expire response payload."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WHATSAPP_API_URL }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.WHATSAPP_API_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"to\": $json.booking.provider.user.phoneNumber,\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"fixmate_booking_expired_provider\",\n    \"language\": { \"code\": \"en\" },\n    \"components\": [\n      { \"type\": \"body\", \"parameters\": [\n        { \"type\": \"text\", \"text\": $json.booking.category.name },\n        { \"type\": \"text\", \"text\": $json.booking.customer.fullName }\n      ] }\n    ]\n  }\n} }}",
+        "options": {}
+      },
+      "id": "b1c2d3e4-0002-4000-8000-000000000008",
+      "name": "Notify Artisan: Request Expired",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1520, 480],
+      "notes": "\"The {{category}} request from {{customer}} has expired after 2 hours of no response and was reassigned.\" Keeps the artisan's expectations calibrated for next time."
+    },
+    {
+      "parameters": {},
+      "id": "b1c2d3e4-0002-4000-8000-000000000009",
+      "name": "No-op (Already Resolved)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1520, 620],
+      "notes": "Booking was accepted/declined/completed before the SLA window closed, or this run woke up early — nothing to do."
+    }
+  ],
+  "connections": {
+    "Booking Webhook": {
+      "main": [[{ "node": "Load Booking Details", "type": "main", "index": 0 }]]
+    },
+    "Load Booking Details": {
+      "main": [[{ "node": "Ping Artisan: New Job Request", "type": "main", "index": 0 }]]
+    },
+    "Ping Artisan: New Job Request": {
+      "main": [[{ "node": "Wait for SLA Window", "type": "main", "index": 0 }]]
+    },
+    "Wait for SLA Window": {
+      "main": [[{ "node": "Check & Expire If Stale", "type": "main", "index": 0 }]]
+    },
+    "Check & Expire If Stale": {
+      "main": [[{ "node": "Was It Actually Cancelled?", "type": "main", "index": 0 }]]
+    },
+    "Was It Actually Cancelled?": {
+      "main": [
+        [
+          { "node": "Notify Customer: Find Someone Else", "type": "main", "index": 0 },
+          { "node": "Notify Artisan: Request Expired", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "No-op (Already Resolved)", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "versionId": "f1e2d3c4-0002-4000-8000-000000000000",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "fixmate-phase1-booking-sla-engine"
+  }
+}

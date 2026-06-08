@@ -1,0 +1,144 @@
+// Thin API client layer — every backend call funnels through here so the
+// rest of the frontend stays agnostic about transport details (Module 3.3
+// routing map). Swapping UI/frontend frameworks later only means redrawing
+// callers of these functions, not re-deriving request shapes.
+
+import {
+  Booking,
+  BookingStatus,
+  OnboardedProvider,
+  ProviderSummary,
+  RegisteredUser,
+  ServiceCategory,
+  VerificationQueueItem,
+  VerifyStatus,
+} from "./types";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+
+// `apiToken` is the short-lived HS256 bridge JWT Auth.js mints on sign-in
+// (see lib/auth.ts's jwt callback / session.apiToken) — it carries the
+// user's id (sub) and role, which the Express API verifies in
+// backend/src/middleware/auth.ts (Module 1.1: "Session data injected with
+// User Roles").
+function authHeaders(apiToken: string): Record<string, string> {
+  return { Authorization: `Bearer ${apiToken}` };
+}
+
+async function apiGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store" });
+
+  if (!res.ok) {
+    throw new Error(`FixMate API request failed: ${path} (${res.status})`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+async function apiPost<T>(path: string, body: unknown, apiToken?: string): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(apiToken ? authHeaders(apiToken) : {}) },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(payload?.error ?? `FixMate API request failed: ${path} (${res.status})`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+async function apiPatch<T>(path: string, body: unknown, apiToken: string): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders(apiToken) },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(payload?.error ?? `FixMate API request failed: ${path} (${res.status})`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+async function apiGetAuthed<T>(path: string, apiToken: string): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    cache: "no-store",
+    headers: authHeaders(apiToken),
+  });
+
+  if (!res.ok) {
+    throw new Error(`FixMate API request failed: ${path} (${res.status})`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+export function getCategories() {
+  return apiGet<ServiceCategory[]>("/categories");
+}
+
+export function getProvidersByCategory(categoryId: string, coords?: { lat: number; lng: number }) {
+  const query = coords ? `?lat=${coords.lat}&lng=${coords.lng}` : "";
+  return apiGet<ProviderSummary[]>(`/categories/${categoryId}/providers${query}`);
+}
+
+export function registerUser(input: { fullName: string; email: string; phoneNumber: string; password: string }) {
+  return apiPost<RegisteredUser>("/auth/register", input);
+}
+
+export function verifyEmail(token: string) {
+  return apiPost<{ verified: boolean }>("/auth/verify-email", { token });
+}
+
+export function forgotPassword(email: string) {
+  return apiPost<{ message: string }>("/auth/forgot-password", { email });
+}
+
+export function resetPassword(input: { token: string; password: string }) {
+  return apiPost<{ message: string }>("/auth/reset-password", input);
+}
+
+export function createBooking(
+  input: { providerId: string; categoryId: string; bookingDate: string; notes: string },
+  apiToken: string,
+) {
+  return apiPost<Booking>("/bookings", input, apiToken);
+}
+
+export function getMyBookings(apiToken: string) {
+  return apiGetAuthed<Booking[]>("/bookings/mine", apiToken);
+}
+
+export function updateBookingStatus(id: string, status: BookingStatus, apiToken: string) {
+  return apiPatch<Booking>(`/bookings/${id}/status`, { status }, apiToken);
+}
+
+export function onboardProvider(
+  input: {
+    bio: string;
+    categoryId: string;
+    idNumber: string;
+    selfieUrl: string;
+    guarantorName: string;
+    guarantorPhone: string;
+    latitude: number;
+    longitude: number;
+    operatingRadiusKm: number;
+  },
+  apiToken: string,
+) {
+  return apiPost<OnboardedProvider>("/providers/onboard", input, apiToken);
+}
+
+export function getVerificationQueue(apiToken: string) {
+  return apiGetAuthed<VerificationQueueItem[]>("/admin/verification-queue", apiToken);
+}
+
+export function setProviderVerification(id: string, verificationStatus: VerifyStatus, apiToken: string) {
+  return apiPatch<VerificationQueueItem>(`/admin/providers/${id}/verify`, { verificationStatus }, apiToken);
+}

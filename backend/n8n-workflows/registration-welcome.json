@@ -1,0 +1,60 @@
+{
+  "name": "FixMate — Registration Welcome (Module 3.2-C)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fixmate-registration",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Registration Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "notes": "Receives the `user.registered` event fired by triggerRegistrationWebhook() in backend/src/lib/n8n.ts. Set N8N_REGISTRATION_WEBHOOK_URL in backend/.env to this node's Production URL.",
+      "webhookId": "fixmate-registration"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WHATSAPP_API_URL }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.WHATSAPP_API_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"to\": $json.body.user.phoneNumber,\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"fixmate_welcome\",\n    \"language\": { \"code\": \"en\" },\n    \"components\": [\n      { \"type\": \"body\", \"parameters\": [ { \"type\": \"text\", \"text\": $json.body.user.fullName } ] }\n    ]\n  }\n} }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000002",
+      "name": "Send WhatsApp Welcome",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300],
+      "notes": "Swap WHATSAPP_API_URL/WHATSAPP_API_TOKEN credentials for your WhatsApp Business / Twilio setup, and `fixmate_welcome` for your approved template name. The payload's `user.role` field is also available if you want a provider-specific variant of the template."
+    }
+  ],
+  "connections": {
+    "Registration Webhook": {
+      "main": [
+        [
+          { "node": "Send WhatsApp Welcome", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "versionId": "f1e2d3c4-0001-4000-8000-000000000000",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "fixmate-phase1-registration-welcome"
+  }
+}
