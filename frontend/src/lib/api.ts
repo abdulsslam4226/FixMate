@@ -6,7 +6,9 @@
 import {
   Booking,
   BookingStatus,
+  IdType,
   OnboardedProvider,
+  ProviderProfile,
   ProviderSummary,
   RegisteredUser,
   ServiceCategory,
@@ -123,6 +125,7 @@ export function onboardProvider(
     bio: string;
     categoryId: string;
     idNumber: string;
+    idType: IdType;
     selfieUrl: string;
     guarantorName: string;
     guarantorPhone: string;
@@ -133,6 +136,26 @@ export function onboardProvider(
   apiToken: string,
 ) {
   return apiPost<OnboardedProvider>("/providers/onboard", input, apiToken);
+}
+
+export async function uploadSelfie(file: File, apiToken: string): Promise<string> {
+  const form = new FormData();
+  form.append("selfie", file);
+  const res = await fetch(`${API_BASE_URL}/upload/selfie`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiToken}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(payload?.error ?? `Upload failed (${res.status})`);
+  }
+  const { url } = (await res.json()) as { url: string };
+  return url;
+}
+
+export function getProvider(id: string) {
+  return apiGet<ProviderProfile>(`/providers/${id}`);
 }
 
 export function getVerificationQueue(apiToken: string) {

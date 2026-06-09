@@ -50,9 +50,33 @@ export interface VerificationQueueItem {
   latitude: string;
   longitude: string;
   operatingRadiusKm: number;
-  user: { fullName: string; email: string; phoneNumber: string };
+  createdAt: string;
+  user: { fullName: string; email: string; phoneNumber: string; createdAt: string };
   category: { name: string };
 }
+
+export interface ProviderProfile {
+  id: string;
+  bio: string;
+  verificationStatus: VerifyStatus;
+  selfieUrl: string;
+  latitude: string;
+  longitude: string;
+  operatingRadiusKm: number;
+  averageRating: number | null;
+  reviewCount: number;
+  user: { fullName: string; phoneNumber: string };
+  category: { name: string; description: string };
+  reviewsReceived: Array<{
+    id: string;
+    rating: number;
+    comment: string;
+    createdAt: string;
+    customer: { fullName: string };
+  }>;
+}
+
+export type IdType = "NIN" | "BVN";
 
 export interface Booking {
   id: string;

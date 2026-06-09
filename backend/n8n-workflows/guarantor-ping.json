@@ -1,0 +1,84 @@
+{
+  "name": "FixMate — Guarantor Ping (Module 3.2-A)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fixmate-guarantor-ping",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "c1d2e3f4-0003-4000-8000-000000000001",
+      "name": "Guarantor Ping Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "notes": "Receives the `provider.guarantor_ping` event fired by triggerGuarantorPingWebhook() in backend/src/lib/n8n.ts — payload: { event, providerId, providerName, guarantorName, guarantorPhone }. Set N8N_GUARANTOR_WEBHOOK_URL in backend/.env to this node's Production URL.",
+      "webhookId": "fixmate-guarantor-ping"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WHATSAPP_API_URL }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.WHATSAPP_API_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"to\": $json.body.guarantorPhone,\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"fixmate_guarantor_confirmation\",\n    \"language\": { \"code\": \"en\" },\n    \"components\": [\n      { \"type\": \"body\", \"parameters\": [\n        { \"type\": \"text\", \"text\": $json.body.guarantorName },\n        { \"type\": \"text\", \"text\": $json.body.providerName }\n      ] }\n    ]\n  }\n} }}",
+        "options": {}
+      },
+      "id": "c1d2e3f4-0003-4000-8000-000000000002",
+      "name": "Ping Guarantor via WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300],
+      "notes": "Sends a WhatsApp message to the guarantor asking them to confirm they vouch for the provider. Template: 'Hi {{guarantorName}}, {{providerName}} has listed you as a guarantor for their FixMate artisan application. Reply YES to confirm you vouch for them, or contact us at support@fixmate.app if you have concerns.' Swap `fixmate_guarantor_confirmation` for your approved template name."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WHATSAPP_API_URL }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.WHATSAPP_API_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"to\": $json.body.providerPhoneNumber,\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"fixmate_application_received\",\n    \"language\": { \"code\": \"en\" },\n    \"components\": [\n      { \"type\": \"body\", \"parameters\": [\n        { \"type\": \"text\", \"text\": $json.body.providerName },\n        { \"type\": \"text\", \"text\": $json.body.guarantorName }\n      ] }\n    ]\n  }\n} }}",
+        "options": {}
+      },
+      "id": "c1d2e3f4-0003-4000-8000-000000000003",
+      "name": "Notify Provider: Application Received",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 460],
+      "notes": "Confirms to the provider that their application is under review and that their guarantor has been contacted. Template: 'Hi {{providerName}}, your FixMate artisan application has been received. We've contacted your guarantor {{guarantorName}} for confirmation. You'll hear from us within 24–48 hours.'"
+    }
+  ],
+  "connections": {
+    "Guarantor Ping Webhook": {
+      "main": [
+        [
+          { "node": "Ping Guarantor via WhatsApp", "type": "main", "index": 0 },
+          { "node": "Notify Provider: Application Received", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "versionId": "f1e2d3c4-0003-4000-8000-000000000000",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "fixmate-phase1-guarantor-ping"
+  }
+}

@@ -42,12 +42,20 @@ export function ProviderList({ providers, categoryId }: { providers: ProviderSum
               <MapPin className="h-3.5 w-3.5" />
               Operates within {provider.operatingRadiusKm} km
             </span>
-            <Button
-              nativeButton={false}
-              render={<Link href={`/book/${provider.id}?categoryId=${categoryId}`}>Book this artisan</Link>}
-              size="sm"
-              className="gradient-violet w-fit border-0 text-primary-foreground"
-            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                nativeButton={false}
+                render={<Link href={`/book/${provider.id}?categoryId=${categoryId}`}>Book this artisan</Link>}
+                size="sm"
+                className="gradient-violet border-0 text-primary-foreground"
+              />
+              <Button
+                nativeButton={false}
+                render={<Link href={`/providers/${provider.id}`}>View profile</Link>}
+                size="sm"
+                variant="outline"
+              />
+            </div>
           </CardContent>
         </Card>
       ))}

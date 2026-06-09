@@ -33,3 +33,18 @@ export function triggerBookingSLAWebhook(booking: { id: string; providerId: stri
     slaWindowHours: 2,
   });
 }
+
+// Module 3.2-A — Localized Trust Engine
+// Notifies the guarantor via WhatsApp that they've been named as a reference for
+// a FixMate provider application, asking them to confirm they vouch for the person.
+export function triggerGuarantorPingWebhook(payload: {
+  providerId: string;
+  providerName: string;
+  guarantorName: string;
+  guarantorPhone: string;
+}) {
+  return postWebhook(process.env.N8N_GUARANTOR_WEBHOOK_URL, {
+    event: "provider.guarantor_ping",
+    ...payload,
+  });
+}

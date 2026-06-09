@@ -15,7 +15,7 @@ or `booking-sla-engine.json`. Each webhook node's *Production URL* is what you p
 
 | Variable | Purpose |
 | --- | --- |
-| `WHATSAPP_API_URL`, `WHATSAPP_API_TOKEN` | Your WhatsApp Business / Twilio messaging endpoint + auth. Swap the template names (`fixmate_welcome`, `fixmate_new_job_request`, `fixmate_booking_expired_customer`, `fixmate_booking_expired_provider`) for your approved templates. |
+| `WHATSAPP_API_URL`, `WHATSAPP_API_TOKEN` | Your WhatsApp Business / Twilio messaging endpoint + auth. Swap the template names (`fixmate_welcome`, `fixmate_guarantor_confirmation`, `fixmate_application_received`, `fixmate_new_job_request`, `fixmate_booking_expired_customer`, `fixmate_booking_expired_provider`) for your approved templates. |
 | `FIXMATE_API_URL` | The Express API's public base URL, e.g. `https://api.fixmate.example/api/v1`. |
 | `FIXMATE_AUTOMATION_SECRET` | Must match `N8N_AUTOMATION_SECRET` in `backend/.env` — sent as the `x-automation-secret` header on the SLA-expiry callback. |
 
@@ -23,7 +23,13 @@ or `booking-sla-engine.json`. Each webhook node's *Production URL* is what you p
 
 `user.registered` → WhatsApp welcome message. One node beyond the webhook trigger.
 
-## 2. `booking-sla-engine.json`
+## 2. `guarantor-ping.json`
+
+`provider.guarantor_ping` → simultaneous WhatsApp messages to (a) the guarantor
+asking them to confirm they vouch for the applicant, and (b) the provider confirming
+their application is under review (Module 3.2-A Localized Trust Engine).
+
+## 3. `booking-sla-engine.json`
 
 This is the actual 2-hour SLA engine described in the masterplan:
 
