@@ -5,6 +5,7 @@
 
 import {
   Booking,
+  BookingReview,
   BookingStatus,
   IdType,
   OnboardedProvider,
@@ -156,6 +157,14 @@ export async function uploadSelfie(file: File, apiToken: string): Promise<string
 
 export function getProvider(id: string) {
   return apiGet<ProviderProfile>(`/providers/${id}`);
+}
+
+export function submitReview(
+  bookingId: string,
+  input: { rating: number; comment: string },
+  apiToken: string,
+) {
+  return apiPost<BookingReview>(`/bookings/${bookingId}/review`, input, apiToken);
 }
 
 export function getVerificationQueue(apiToken: string) {

@@ -78,6 +78,13 @@ export interface ProviderProfile {
 
 export type IdType = "NIN" | "BVN";
 
+export interface BookingReview {
+  id: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+}
+
 export interface Booking {
   id: string;
   status: BookingStatus;
@@ -86,4 +93,5 @@ export interface Booking {
   customer: { fullName: string };
   provider: { user: { fullName: string } };
   category: { name: string };
+  review: BookingReview | null;
 }

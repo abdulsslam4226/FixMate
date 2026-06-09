@@ -11,6 +11,7 @@ const BOOKING_DISPLAY_INCLUDE = {
   customer: { select: { fullName: true } },
   provider: { include: { user: { select: { fullName: true } } } },
   category: { select: { name: true } },
+  review: { select: { id: true, rating: true, comment: true, createdAt: true } },
 } as const;
 
 // GET /api/v1/bookings/mine — Private
@@ -91,4 +92,42 @@ export async function updateBookingStatus(req: AuthenticatedRequest, res: Respon
   });
 
   res.json(booking);
+}
+
+// POST /api/v1/bookings/:id/review — Customer only
+// Submits a 1–5 star rating + comment for a COMPLETED booking. One review per
+// booking is enforced by the schema's @unique(bookingId) constraint.
+export async function submitReview(req: AuthenticatedRequest, res: Response) {
+  const bookingId = String(req.params.id);
+  const customerId = req.user!.id;
+  const { rating, comment } = req.body;
+
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: "rating must be an integer between 1 and 5" });
+  }
+  if (!comment || typeof comment !== "string" || !comment.trim()) {
+    return res.status(400).json({ error: "comment is required" });
+  }
+
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { review: true },
+  });
+
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (booking.customerId !== customerId) return res.status(403).json({ error: "Only the customer who made this booking can review it" });
+  if (booking.status !== "COMPLETED") return res.status(400).json({ error: "You can only review a completed booking" });
+  if (booking.review) return res.status(409).json({ error: "This booking has already been reviewed" });
+
+  const review = await prisma.review.create({
+    data: {
+      bookingId,
+      customerId,
+      providerId: booking.providerId,
+      rating,
+      comment: comment.trim(),
+    },
+  });
+
+  res.status(201).json(review);
 }
