@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import { AdminNav } from "@/components/admin-nav";
 import { VerificationQueue } from "@/components/verification-queue";
 import { getVerificationQueue } from "@/lib/api";
 import type { VerificationQueueItem } from "@/lib/types";
@@ -49,12 +50,17 @@ export default function VerificationQueuePage() {
 
   return (
     <main className="industrial-texture mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-6 py-12">
-      <header className="flex flex-col gap-2">
+      <div className="mb-6 flex flex-col gap-1">
         <span className="text-muted-foreground font-mono text-label-sm uppercase tracking-[0.2em]">Admin workspace</span>
         <h1 className="font-heading text-headline-md sm:text-headline-lg font-bold">Provider verification queue</h1>
+      </div>
+
+      <AdminNav />
+
+      <header className="flex flex-col gap-2">
         <p className="text-muted-foreground max-w-2xl text-body-md">
           Review each artisan&apos;s NIN/BVN, selfie and physical guarantor before they go live with the
-          violet verified badge.
+          verified badge.
         </p>
       </header>
 

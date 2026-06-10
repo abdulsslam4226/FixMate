@@ -39,7 +39,7 @@ export default async function ProviderProfilePage({ params }: { params: Promise<
           <img
             src={provider.selfieUrl}
             alt={provider.user.fullName}
-            className="h-28 w-28 shrink-0 rounded-2xl object-cover ring-2 ring-violet-500/40"
+            className="h-28 w-28 shrink-0 rounded-2xl object-cover ring-2 ring-orange-500/40"
           />
         )}
         <div className="flex flex-1 flex-col gap-2">

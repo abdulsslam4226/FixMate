@@ -22,27 +22,55 @@ function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 }
 
 // GET /api/v1/categories/:id/providers — Public
-// Fetches verified category artisans within geographic bounds (Module 3.3)
+// Fetches verified category artisans with optional geo, text, rating and price filtering.
 export async function listProvidersByCategory(req: Request, res: Response) {
   const id = String(req.params.id);
-  const { lat, lng } = req.query;
+  const { lat, lng, q, minRating, sortBy } = req.query;
+
+  const textFilter = typeof q === "string" && q.trim()
+    ? {
+        OR: [
+          { user: { fullName: { contains: q.trim(), mode: "insensitive" as const } } },
+          { bio: { contains: q.trim(), mode: "insensitive" as const } },
+        ],
+      }
+    : {};
+
+  const priceOrder =
+    sortBy === "price_asc" ? ({ pricePerJobKobo: "asc" } as const) :
+    sortBy === "price_desc" ? ({ pricePerJobKobo: "desc" } as const) :
+    undefined;
 
   const providers = await prisma.providerProfile.findMany({
-    where: { categoryId: id, verificationStatus: "VERIFIED" },
-    include: { user: true },
+    where: { categoryId: id, verificationStatus: "VERIFIED", ...textFilter },
+    include: {
+      user: { select: { id: true, fullName: true } },
+      reviewsReceived: { select: { rating: true } },
+    },
+    ...(priceOrder && { orderBy: priceOrder }),
   });
 
-  if (lat == null || lng == null) {
-    return res.json(providers);
+  // Geo filter (if coordinates provided)
+  const geoFiltered = lat != null && lng != null
+    ? providers.filter((p) => distanceKm(Number(lat), Number(lng), Number(p.latitude), Number(p.longitude)) <= p.operatingRadiusKm)
+    : providers;
+
+  // Compute averageRating per provider
+  const withRating = geoFiltered.map((p) => {
+    const ratings = p.reviewsReceived.map((r) => r.rating);
+    const avg = ratings.length ? Number((ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1)) : null;
+    const { reviewsReceived: _, ...rest } = p;
+    return { ...rest, averageRating: avg, reviewCount: ratings.length };
+  });
+
+  // Rating filter
+  const minR = minRating != null ? Number(minRating) : 0;
+  const ratingFiltered = minR > 0 ? withRating.filter((p) => p.averageRating != null && p.averageRating >= minR) : withRating;
+
+  // Rating sort (applied after geo/rating filter)
+  if (sortBy === "rating_desc") {
+    ratingFiltered.sort((a, b) => (b.averageRating ?? 0) - (a.averageRating ?? 0));
   }
 
-  const originLat = Number(lat);
-  const originLng = Number(lng);
-
-  const withinBounds = providers.filter((provider) => {
-    const distance = distanceKm(originLat, originLng, Number(provider.latitude), Number(provider.longitude));
-    return distance <= provider.operatingRadiusKm;
-  });
-
-  res.json(withinBounds);
+  res.json(ratingFiltered);
 }

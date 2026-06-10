@@ -27,6 +27,9 @@ export async function onboard(req: AuthenticatedRequest, res: Response) {
     latitude,
     longitude,
     operatingRadiusKm,
+    pricePerJobKobo,
+    bankCode,
+    accountNumber,
   } = req.body;
 
   if (
@@ -71,6 +74,9 @@ export async function onboard(req: AuthenticatedRequest, res: Response) {
       latitude,
       longitude,
       operatingRadiusKm: operatingRadiusKm ?? undefined,
+      pricePerJobKobo: pricePerJobKobo ? Number(pricePerJobKobo) : undefined,
+      bankCode: bankCode || undefined,
+      accountNumber: accountNumber || undefined,
     },
     include: PROVIDER_INCLUDE,
   });
@@ -89,6 +95,80 @@ export async function onboard(req: AuthenticatedRequest, res: Response) {
     profile,
     identityCheck: identityResult,
   });
+}
+
+// GET /api/v1/providers/dashboard — Provider auth
+// Returns the authenticated provider's stats, recent bookings, and editable
+// profile fields in one request so the dashboard page only makes one round-trip.
+export async function getDashboard(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user!.id;
+
+  const profile = await prisma.providerProfile.findUnique({
+    where: { userId },
+    include: { category: { select: { name: true } } },
+  });
+  if (!profile) {
+    return res.status(404).json({ error: "Provider profile not found. Complete onboarding first." });
+  }
+
+  const [bookings, totalPaidAgg, pendingPayoutAgg] = await Promise.all([
+    prisma.booking.findMany({
+      where: { providerId: profile.id },
+      include: {
+        customer: { select: { fullName: true, phoneNumber: true } },
+        category: { select: { name: true } },
+        payment: { select: { id: true, amountKobo: true, reference: true, status: true, paidAt: true, createdAt: true } },
+        review: { select: { rating: true, comment: true, createdAt: true } },
+      },
+      orderBy: { bookingDate: "desc" },
+      take: 50,
+    }),
+    prisma.payment.aggregate({
+      where: { booking: { providerId: profile.id }, status: "PAID" },
+      _sum: { amountKobo: true },
+    }),
+    prisma.payment.aggregate({
+      where: { booking: { providerId: profile.id, status: "ACCEPTED" }, status: "PAID" },
+      _sum: { amountKobo: true },
+    }),
+  ]);
+
+  const stats = {
+    total: bookings.length,
+    pending: bookings.filter((b) => b.status === "PENDING").length,
+    accepted: bookings.filter((b) => b.status === "ACCEPTED").length,
+    completed: bookings.filter((b) => b.status === "COMPLETED").length,
+    cancelled: bookings.filter((b) => b.status === "CANCELLED").length,
+    totalEarningsKobo: totalPaidAgg._sum.amountKobo ?? 0,
+    pendingPayoutKobo: pendingPayoutAgg._sum.amountKobo ?? 0,
+  };
+
+  res.json({ profile, bookings, stats });
+}
+
+// PATCH /api/v1/providers/profile — Provider auth
+// Updates the mutable fields on the provider's profile. Fields omitted from
+// the body are left unchanged.
+export async function updateProviderProfile(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user!.id;
+  const { bio, pricePerJobKobo, bankCode, accountNumber, operatingRadiusKm } = req.body;
+
+  const existing = await prisma.providerProfile.findUnique({ where: { userId } });
+  if (!existing) return res.status(404).json({ error: "Provider profile not found" });
+
+  const updated = await prisma.providerProfile.update({
+    where: { userId },
+    data: {
+      ...(bio !== undefined && { bio }),
+      ...(pricePerJobKobo !== undefined && { pricePerJobKobo: Number(pricePerJobKobo) }),
+      ...(bankCode !== undefined && { bankCode: bankCode || null }),
+      ...(accountNumber !== undefined && { accountNumber: accountNumber || null }),
+      ...(operatingRadiusKm !== undefined && { operatingRadiusKm: Number(operatingRadiusKm) }),
+    },
+    include: { category: { select: { name: true } } },
+  });
+
+  res.json(updated);
 }
 
 // GET /api/v1/providers/:id — Public

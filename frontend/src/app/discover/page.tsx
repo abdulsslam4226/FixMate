@@ -1,7 +1,8 @@
-import { CategoryGrid } from "@/components/category-grid";
+export const dynamic = "force-dynamic";
+
+import { SearchableCategories } from "@/components/searchable-categories";
 import { getCategories } from "@/lib/api";
 
-// Categorical Discovery dashboard — Module 3.2-B.
 export default async function DiscoverPage() {
   const categories = await getCategories();
 
@@ -19,7 +20,7 @@ export default async function DiscoverPage() {
 
       <section className="flex flex-col gap-4">
         <h2 className="font-heading text-headline-md font-semibold">Browse by category</h2>
-        <CategoryGrid categories={categories} />
+        <SearchableCategories categories={categories} />
       </section>
     </main>
   );

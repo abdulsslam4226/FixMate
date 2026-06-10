@@ -4,6 +4,8 @@
 
 export type VerifyStatus = "PENDING" | "VERIFIED" | "REJECTED";
 export type BookingStatus = "PENDING" | "ACCEPTED" | "COMPLETED" | "CANCELLED";
+export type PaymentStatus = "PENDING" | "PAID" | "REFUNDED" | "FAILED";
+export type DisputeStatus = "OPEN" | "RESOLVED_REFUND" | "RESOLVED_RELEASE";
 
 export interface ServiceCategory {
   id: string;
@@ -27,7 +29,11 @@ export interface ProviderSummary {
   latitude: string;
   longitude: string;
   operatingRadiusKm: number;
+  pricePerJobKobo: number;
+  averageRating: number | null;
+  reviewCount: number;
   user: {
+    id: string;
     fullName: string;
   };
 }
@@ -63,6 +69,7 @@ export interface ProviderProfile {
   latitude: string;
   longitude: string;
   operatingRadiusKm: number;
+  pricePerJobKobo: number;
   averageRating: number | null;
   reviewCount: number;
   user: { fullName: string; phoneNumber: string };
@@ -76,12 +83,77 @@ export interface ProviderProfile {
   }>;
 }
 
+export interface Payment {
+  id: string;
+  bookingId: string;
+  amountKobo: number;
+  reference: string;
+  status: PaymentStatus;
+  paidAt: string | null;
+  createdAt: string;
+}
+
 export type IdType = "NIN" | "BVN";
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface DashboardStats {
+  total: number;
+  pending: number;
+  accepted: number;
+  completed: number;
+  cancelled: number;
+  totalEarningsKobo: number;
+  pendingPayoutKobo: number;
+}
+
+export interface DashboardProfile {
+  id: string;
+  bio: string;
+  verificationStatus: VerifyStatus;
+  pricePerJobKobo: number;
+  operatingRadiusKm: number;
+  bankCode: string | null;
+  accountNumber: string | null;
+  selfieUrl: string;
+  category: { name: string };
+}
+
+export interface DashboardBooking {
+  id: string;
+  status: BookingStatus;
+  bookingDate: string;
+  notes: string;
+  customer: { fullName: string; phoneNumber: string };
+  category: { name: string };
+  payment: Payment | null;
+  review: { rating: number; comment: string; createdAt: string } | null;
+}
+
+export interface ProviderDashboardData {
+  profile: DashboardProfile;
+  bookings: DashboardBooking[];
+  stats: DashboardStats;
+}
 
 export interface BookingReview {
   id: string;
   rating: number;
   comment: string;
+  createdAt: string;
+}
+
+export interface BookingDispute {
+  id: string;
+  status: DisputeStatus;
+  reason: string;
+  resolution: string | null;
   createdAt: string;
 }
 
@@ -91,7 +163,47 @@ export interface Booking {
   bookingDate: string;
   notes: string;
   customer: { fullName: string };
-  provider: { user: { fullName: string } };
+  provider: { user: { fullName: string }; pricePerJobKobo: number };
   category: { name: string };
   review: BookingReview | null;
+  payment: Payment | null;
+  dispute: BookingDispute | null;
+}
+
+export interface AdminStats {
+  bookings: { total: number; pending: number; accepted: number; completed: number; cancelled: number };
+  revenue: { totalCollectedKobo: number; platformCommissionKobo: number; refundedKobo: number };
+  providers: { total: number; verified: number; pending: number; rejected: number };
+  users: { totalCustomers: number };
+  disputes: { open: number; resolvedRefund: number; resolvedRelease: number };
+  recentBookings: Array<{
+    id: string;
+    status: BookingStatus;
+    bookingDate: string;
+    category: { name: string };
+    customer: { fullName: string };
+    provider: { user: { fullName: string } };
+    payment: { amountKobo: number; status: PaymentStatus } | null;
+  }>;
+}
+
+export interface AdminDispute {
+  id: string;
+  status: DisputeStatus;
+  reason: string;
+  resolution: string | null;
+  createdAt: string;
+  updatedAt: string;
+  raisedBy: { fullName: string; email: string };
+  resolvedBy: { fullName: string } | null;
+  booking: {
+    id: string;
+    status: BookingStatus;
+    bookingDate: string;
+    notes: string;
+    category: { name: string };
+    customer: { fullName: string; email: string; phoneNumber: string };
+    provider: { user: { fullName: string; email: string } };
+    payment: { id: string; amountKobo: number; reference: string; status: PaymentStatus } | null;
+  };
 }

@@ -4,11 +4,18 @@
 // callers of these functions, not re-deriving request shapes.
 
 import {
+  AdminDispute,
+  AdminStats,
   Booking,
+  BookingDispute,
   BookingReview,
   BookingStatus,
+  DashboardProfile,
   IdType,
+  Notification,
   OnboardedProvider,
+  Payment,
+  ProviderDashboardData,
   ProviderProfile,
   ProviderSummary,
   RegisteredUser,
@@ -85,8 +92,17 @@ export function getCategories() {
   return apiGet<ServiceCategory[]>("/categories");
 }
 
-export function getProvidersByCategory(categoryId: string, coords?: { lat: number; lng: number }) {
-  const query = coords ? `?lat=${coords.lat}&lng=${coords.lng}` : "";
+export function getProvidersByCategory(
+  categoryId: string,
+  params?: { lat?: number; lng?: number; q?: string; minRating?: number; sortBy?: string },
+) {
+  const qs = new URLSearchParams();
+  if (params?.lat != null) qs.set("lat", String(params.lat));
+  if (params?.lng != null) qs.set("lng", String(params.lng));
+  if (params?.q) qs.set("q", params.q);
+  if (params?.minRating) qs.set("minRating", String(params.minRating));
+  if (params?.sortBy) qs.set("sortBy", params.sortBy);
+  const query = qs.toString() ? `?${qs}` : "";
   return apiGet<ProviderSummary[]>(`/categories/${categoryId}/providers${query}`);
 }
 
@@ -133,6 +149,9 @@ export function onboardProvider(
     latitude: number;
     longitude: number;
     operatingRadiusKm: number;
+    pricePerJobKobo?: number;
+    bankCode?: string;
+    accountNumber?: string;
   },
   apiToken: string,
 ) {
@@ -165,6 +184,75 @@ export function submitReview(
   apiToken: string,
 ) {
   return apiPost<BookingReview>(`/bookings/${bookingId}/review`, input, apiToken);
+}
+
+export function getProviderDashboard(apiToken: string) {
+  return apiGetAuthed<ProviderDashboardData>("/providers/dashboard", apiToken);
+}
+
+export function updateProviderProfile(
+  input: {
+    bio?: string;
+    pricePerJobKobo?: number;
+    bankCode?: string;
+    accountNumber?: string;
+    operatingRadiusKm?: number;
+  },
+  apiToken: string,
+) {
+  return apiPatch<DashboardProfile>("/providers/profile", input, apiToken);
+}
+
+export function initializePayment(bookingId: string, apiToken: string) {
+  return apiPost<{ authorizationUrl: string; reference: string }>(
+    "/payments/initialize",
+    { bookingId },
+    apiToken,
+  );
+}
+
+export function verifyPayment(reference: string) {
+  return apiGet<Payment>(`/payments/verify?reference=${encodeURIComponent(reference)}`);
+}
+
+export function getBookingPayment(bookingId: string, apiToken: string) {
+  return apiGetAuthed<Payment>(`/payments/booking/${bookingId}`, apiToken);
+}
+
+export function getNotifications(apiToken: string) {
+  return apiGetAuthed<Notification[]>("/notifications", apiToken);
+}
+
+export function markNotificationRead(id: string, apiToken: string) {
+  return apiPatch<Notification>(`/notifications/${id}/read`, {}, apiToken);
+}
+
+export function markAllNotificationsRead(apiToken: string) {
+  return apiPatch<{ ok: boolean }>("/notifications/read-all", {}, apiToken);
+}
+
+export function cancelBooking(bookingId: string, apiToken: string) {
+  return apiPost<Booking>(`/bookings/${bookingId}/cancel`, {}, apiToken);
+}
+
+export function raiseDispute(bookingId: string, reason: string, apiToken: string) {
+  return apiPost<BookingDispute>(`/bookings/${bookingId}/dispute`, { reason }, apiToken);
+}
+
+export function listAdminDisputes(apiToken: string) {
+  return apiGetAuthed<AdminDispute[]>("/admin/disputes", apiToken);
+}
+
+export function resolveDispute(
+  disputeId: string,
+  input: { outcome: "REFUND" | "RELEASE"; resolution: string },
+  apiToken: string,
+) {
+  return apiPatch<AdminDispute>(`/admin/disputes/${disputeId}/resolve`, input, apiToken);
+}
+
+export function getAdminStats(apiToken: string) {
+  return apiGetAuthed<AdminStats>("/admin/stats", apiToken);
 }
 
 export function getVerificationQueue(apiToken: string) {

@@ -25,7 +25,7 @@ export default async function CategoryProvidersPage({
         {category?.description && <p className="text-muted-foreground max-w-2xl">{category.description}</p>}
       </header>
 
-      <ProviderList providers={providers} categoryId={id} />
+      <ProviderList initialProviders={providers} categoryId={id} />
     </main>
   );
 }

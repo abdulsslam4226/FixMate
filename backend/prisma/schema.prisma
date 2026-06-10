@@ -34,6 +34,19 @@ enum TokenPurpose {
   PASSWORD_RESET
 }
 
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVED_REFUND
+  RESOLVED_RELEASE
+}
+
 model User {
   id               String           @id @default(uuid())
   fullName         String
@@ -46,11 +59,13 @@ model User {
   updatedAt        DateTime         @updatedAt
 
   // Relations
-  customerBookings Booking[]        @relation("CustomerToBooking")
-  providerProfile  ProviderProfile?
-  reviewsWritten   Review[]         @relation("CustomerToReview")
-  notifications    Notification[]
+  customerBookings  Booking[]        @relation("CustomerToBooking")
+  providerProfile   ProviderProfile?
+  reviewsWritten    Review[]         @relation("CustomerToReview")
+  notifications     Notification[]
   verificationTokens VerificationToken[]
+  disputesRaised    Dispute[]        @relation("DisputeRaisedBy")
+  disputesResolved  Dispute[]        @relation("DisputeResolvedBy")
 }
 
 model VerificationToken {
@@ -84,6 +99,12 @@ model ProviderProfile {
   latitude           Decimal          @db.Decimal(9, 6)
   longitude          Decimal          @db.Decimal(9, 6)
   operatingRadiusKm  Int              @default(10)
+
+  // Pricing & Paystack payout details
+  pricePerJobKobo    Int              @default(500000) // ₦5,000 default
+  bankCode           String?
+  accountNumber      String?
+  recipientCode      String?          // Paystack transfer recipient code
 
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
@@ -126,11 +147,8 @@ model Booking {
 
   // Relations
   review      Review?
-
-  // ==========================================
-  // PHASE 2 PAYMENT PLACEHOLDERS
-  // paymentStatus   String   @default("UNPAID") // UNPAID, ESCROW, RELEASED, REFUNDED
-  // ==========================================
+  payment     Payment?
+  dispute     Dispute?
 }
 
 model Review {
@@ -145,6 +163,34 @@ model Review {
   rating      Int      // 1 to 5 scale
   comment     String   @db.Text
   createdAt   DateTime @default(now())
+}
+
+model Payment {
+  id           String        @id @default(uuid())
+  bookingId    String        @unique
+  booking      Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amountKobo   Int
+  reference    String        @unique
+  status       PaymentStatus @default(PENDING)
+  paidAt       DateTime?
+  transferCode String?       // Paystack transfer reference for provider payout
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Dispute {
+  id           String        @id @default(uuid())
+  bookingId    String        @unique
+  booking      Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  raisedById   String
+  raisedBy     User          @relation("DisputeRaisedBy", fields: [raisedById], references: [id])
+  reason       String        @db.Text
+  status       DisputeStatus @default(OPEN)
+  resolution   String?       @db.Text
+  resolvedById String?
+  resolvedBy   User?         @relation("DisputeResolvedBy", fields: [resolvedById], references: [id])
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
 
 model Notification {

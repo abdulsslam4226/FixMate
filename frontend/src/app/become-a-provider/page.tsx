@@ -29,6 +29,9 @@ export default function BecomeAProviderPage() {
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [operatingRadiusKm, setOperatingRadiusKm] = useState("10");
+  const [pricePerJob, setPricePerJob] = useState("5000");
+  const [bankCode, setBankCode] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const [geoStatus, setGeoStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "success">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +92,9 @@ export default function BecomeAProviderPage() {
           latitude: Number(latitude),
           longitude: Number(longitude),
           operatingRadiusKm: Number(operatingRadiusKm),
+          pricePerJobKobo: pricePerJob ? Math.round(Number(pricePerJob) * 100) : undefined,
+          bankCode: bankCode || undefined,
+          accountNumber: accountNumber || undefined,
         },
         session.apiToken,
       );
@@ -301,6 +307,68 @@ export default function BecomeAProviderPage() {
               </div>
               <p className="text-muted-foreground font-mono text-xs">
                 This is how FixMate matches you to customers nearby.
+              </p>
+            </div>
+
+            {/* Pricing & bank account */}
+            <div className="border-border/60 flex flex-col gap-4 rounded-lg border border-dashed p-4">
+              <p className="text-muted-foreground font-mono text-label-sm uppercase tracking-[0.15em]">
+                Pricing &amp; payout details
+              </p>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="pricePerJob">Your price per job (₦)</Label>
+                <Input
+                  id="pricePerJob"
+                  type="number"
+                  min="500"
+                  step="500"
+                  value={pricePerJob}
+                  onChange={(e) => setPricePerJob(e.target.value)}
+                  placeholder="5000"
+                  required
+                />
+                <p className="text-muted-foreground text-xs">
+                  Customers see this when booking. FixMate retains a 10% platform fee; you receive the rest on job completion.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="bankCode">Bank code <span className="text-muted-foreground">(optional)</span></Label>
+                  <select
+                    id="bankCode"
+                    value={bankCode}
+                    onChange={(e) => setBankCode(e.target.value)}
+                    className="border-input bg-input/30 focus-visible:ring-ring/50 focus-visible:border-ring h-8 w-full rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-3"
+                  >
+                    <option value="">Select bank</option>
+                    <option value="058">GTBank (058)</option>
+                    <option value="011">First Bank (011)</option>
+                    <option value="057">Zenith Bank (057)</option>
+                    <option value="033">UBA (033)</option>
+                    <option value="044">Access Bank (044)</option>
+                    <option value="050">EcoBank (050)</option>
+                    <option value="076">Polaris Bank (076)</option>
+                    <option value="221">Stanbic IBTC (221)</option>
+                    <option value="035">Wema / ALAT (035)</option>
+                    <option value="070">Fidelity Bank (070)</option>
+                    <option value="232">Sterling Bank (232)</option>
+                    <option value="032">Union Bank (032)</option>
+                    <option value="000014">Guaranty Trust Bank Mobile (000014)</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="accountNumber">Account number <span className="text-muted-foreground">(optional)</span></Label>
+                  <Input
+                    id="accountNumber"
+                    value={accountNumber}
+                    onChange={(e) => setAccountNumber(e.target.value)}
+                    placeholder="0123456789"
+                    maxLength={10}
+                  />
+                </div>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                Bank details can be added later if you don&apos;t have them handy — they&apos;re needed only for automatic payouts.
               </p>
             </div>
 

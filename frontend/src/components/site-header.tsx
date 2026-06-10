@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/notification-bell";
 
 const NAV_LINKS = [
   { href: "/discover", label: "Browse services" },
@@ -19,9 +21,16 @@ export function SiteHeader() {
 
   return (
     <header className="bg-card/80 border-border sticky top-0 z-50 w-full border-b backdrop-blur">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 py-4">
-        <Link href="/" className="gradient-text font-mono text-sm font-semibold tracking-[0.2em] uppercase">
-          FixMate
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 py-2">
+        <Link href="/" className="flex items-center">
+          <Image
+            src="/logo.png"
+            alt="FixMate — Your Trusted Repair Partner"
+            width={200}
+            height={64}
+            className="h-16 w-auto object-contain"
+            priority
+          />
         </Link>
 
         <nav className="hidden items-center gap-6 md:flex">
@@ -34,6 +43,22 @@ export function SiteHeader() {
               {link.label}
             </Link>
           ))}
+          {session && session.user.role === "PROVIDER" && (
+            <Link
+              href="/dashboard"
+              className="text-muted-foreground font-mono text-label-sm uppercase tracking-wide hover:text-foreground"
+            >
+              Dashboard
+            </Link>
+          )}
+          {session && session.user.role === "ADMIN" && (
+            <Link
+              href="/admin"
+              className="text-muted-foreground font-mono text-label-sm uppercase tracking-wide hover:text-foreground"
+            >
+              Admin
+            </Link>
+          )}
           {session && (
             <Link
               href="/bookings"
@@ -47,6 +72,7 @@ export function SiteHeader() {
         <div className="flex items-center gap-2">
           {session ? (
             <>
+              <NotificationBell />
               <span className="text-muted-foreground hidden font-mono text-label-sm sm:inline">
                 Hi, {session.user.name?.split(" ")[0]}
               </span>

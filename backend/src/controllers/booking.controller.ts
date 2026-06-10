@@ -1,7 +1,11 @@
 import { Response } from "express";
 import { prisma } from "../lib/prisma";
 import { triggerBookingSLAWebhook } from "../lib/n8n";
+import { createNotification } from "../lib/notify";
+import { initiateTransfer, createTransferRecipient, refundTransaction } from "../lib/paystack";
 import { AuthenticatedRequest } from "../middleware/auth";
+
+const PLATFORM_FEE_PERCENT = Number(process.env.PLATFORM_FEE_PERCENT ?? "10");
 
 const TRANSITIONABLE_STATUSES = ["ACCEPTED", "COMPLETED", "CANCELLED"] as const;
 
@@ -9,9 +13,11 @@ const TRANSITIONABLE_STATUSES = ["ACCEPTED", "COMPLETED", "CANCELLED"] as const;
 // category) — kept in one place so list and status-update responses match.
 const BOOKING_DISPLAY_INCLUDE = {
   customer: { select: { fullName: true } },
-  provider: { include: { user: { select: { fullName: true } } } },
+  provider: { select: { user: { select: { fullName: true } }, pricePerJobKobo: true } },
   category: { select: { name: true } },
   review: { select: { id: true, rating: true, comment: true, createdAt: true } },
+  payment: { select: { id: true, amountKobo: true, reference: true, status: true, paidAt: true, createdAt: true } },
+  dispute: { select: { id: true, status: true, reason: true, resolution: true, createdAt: true } },
 } as const;
 
 // GET /api/v1/bookings/mine — Private
@@ -72,6 +78,20 @@ export async function createBooking(req: AuthenticatedRequest, res: Response) {
     bookingDate: booking.bookingDate,
   });
 
+  // Notify the provider that a new job has arrived
+  const [providerProfile, customer, category] = await Promise.all([
+    prisma.providerProfile.findUnique({ where: { id: providerId } }),
+    prisma.user.findUnique({ where: { id: customerId }, select: { fullName: true } }),
+    prisma.serviceCategory.findUnique({ where: { id: categoryId }, select: { name: true } }),
+  ]);
+  if (providerProfile) {
+    await createNotification(
+      providerProfile.userId,
+      "New booking request",
+      `${customer?.fullName ?? "A customer"} has requested your ${category?.name ?? "service"} on ${new Date(bookingDate).toLocaleDateString("en-NG", { dateStyle: "medium" })}.`,
+    );
+  }
+
   res.status(201).json(booking);
 }
 
@@ -90,6 +110,85 @@ export async function updateBookingStatus(req: AuthenticatedRequest, res: Respon
     data: { status },
     include: BOOKING_DISPLAY_INCLUDE,
   });
+
+  // Provider payout on completion
+  if (status === "COMPLETED" && booking.payment?.status === "PAID") {
+    const providerProfile = await prisma.providerProfile.findUnique({
+      where: { id: booking.providerId },
+      include: { user: { select: { fullName: true } } },
+    });
+    if (providerProfile?.bankCode && providerProfile.accountNumber) {
+      try {
+        let recipientCode = providerProfile.recipientCode;
+        if (!recipientCode) {
+          recipientCode = await createTransferRecipient(
+            providerProfile.user.fullName,
+            providerProfile.bankCode,
+            providerProfile.accountNumber,
+          );
+          if (recipientCode) {
+            await prisma.providerProfile.update({
+              where: { id: providerProfile.id },
+              data: { recipientCode },
+            });
+          }
+        }
+        if (recipientCode) {
+          const providerAmountKobo = Math.round(
+            booking.payment.amountKobo * (1 - PLATFORM_FEE_PERCENT / 100),
+          );
+          const transferCode = await initiateTransfer(
+            providerAmountKobo,
+            recipientCode,
+            `FixMate payout — booking ${booking.id}`,
+          );
+          if (transferCode) {
+            await prisma.payment.update({
+              where: { bookingId: booking.id },
+              data: { transferCode },
+            });
+          }
+        }
+      } catch (err) {
+        console.error("[paystack] Payout failed for booking", booking.id, err);
+      }
+    }
+  }
+
+  // Refund on cancellation if the booking was paid
+  if (status === "CANCELLED" && booking.payment?.status === "PAID") {
+    try {
+      await refundTransaction(booking.payment.reference);
+      await prisma.payment.update({
+        where: { bookingId: booking.id },
+        data: { status: "REFUNDED" },
+      });
+    } catch (err) {
+      console.error("[paystack] Refund failed for booking", booking.id, err);
+    }
+  }
+
+  // Notify the customer whenever their booking status changes
+  const providerName = booking.provider.user.fullName;
+  const categoryName = booking.category.name;
+  const CUSTOMER_MESSAGES: Partial<Record<typeof status, { title: string; message: string }>> = {
+    ACCEPTED: {
+      title: "Booking accepted!",
+      message: `${providerName} accepted your ${categoryName} booking. They're on the way!`,
+    },
+    COMPLETED: {
+      title: "Booking completed",
+      message: `${providerName} marked your ${categoryName} booking as completed. How did it go? Leave a review!`,
+    },
+    CANCELLED: {
+      title: "Booking cancelled",
+      message: `Your ${categoryName} booking has been cancelled.`,
+    },
+  };
+  const notif = CUSTOMER_MESSAGES[status];
+  if (notif) {
+    await createNotification(booking.customerId, notif.title, notif.message);
+  }
 
   res.json(booking);
 }
@@ -119,15 +218,110 @@ export async function submitReview(req: AuthenticatedRequest, res: Response) {
   if (booking.status !== "COMPLETED") return res.status(400).json({ error: "You can only review a completed booking" });
   if (booking.review) return res.status(409).json({ error: "This booking has already been reviewed" });
 
-  const review = await prisma.review.create({
-    data: {
-      bookingId,
-      customerId,
-      providerId: booking.providerId,
-      rating,
-      comment: comment.trim(),
-    },
-  });
+  const [review, customer, providerProfile] = await Promise.all([
+    prisma.review.create({
+      data: { bookingId, customerId, providerId: booking.providerId, rating, comment: comment.trim() },
+    }),
+    prisma.user.findUnique({ where: { id: customerId }, select: { fullName: true } }),
+    prisma.providerProfile.findUnique({ where: { id: booking.providerId }, select: { userId: true } }),
+  ]);
+
+  if (providerProfile) {
+    const stars = "★".repeat(rating) + "☆".repeat(5 - rating);
+    await createNotification(
+      providerProfile.userId,
+      "New review received",
+      `${customer?.fullName ?? "A customer"} left you a ${rating}-star review ${stars}.`,
+    );
+  }
 
   res.status(201).json(review);
+}
+
+// POST /api/v1/bookings/:id/cancel — Customer only
+// Lets the customer cancel a booking they created, as long as it hasn't been
+// completed yet. Triggers a Paystack refund if the booking was already paid.
+export async function cancelBooking(req: AuthenticatedRequest, res: Response) {
+  const bookingId = String(req.params.id);
+  const customerId = req.user!.id;
+
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { payment: true, provider: { include: { user: { select: { fullName: true } } } }, category: { select: { name: true } } },
+  });
+
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (booking.customerId !== customerId) return res.status(403).json({ error: "Not your booking" });
+  if (booking.status === "COMPLETED") return res.status(400).json({ error: "Cannot cancel a completed booking — raise a dispute instead" });
+  if (booking.status === "CANCELLED") return res.status(400).json({ error: "Booking is already cancelled" });
+
+  const updated = await prisma.booking.update({
+    where: { id: bookingId },
+    data: { status: "CANCELLED" },
+    include: BOOKING_DISPLAY_INCLUDE,
+  });
+
+  // Refund if paid
+  if (booking.payment?.status === "PAID") {
+    try {
+      await refundTransaction(booking.payment.reference);
+      await prisma.payment.update({ where: { bookingId }, data: { status: "REFUNDED" } });
+    } catch (err) {
+      console.error("[paystack] Refund failed for customer cancel", bookingId, err);
+    }
+  }
+
+  // Notify provider
+  const providerProfile = await prisma.providerProfile.findUnique({
+    where: { id: booking.providerId },
+    select: { userId: true },
+  });
+  if (providerProfile) {
+    await createNotification(
+      providerProfile.userId,
+      "Booking cancelled",
+      `${booking.category.name} booking from a customer has been cancelled.`,
+    );
+  }
+
+  res.json(updated);
+}
+
+// POST /api/v1/bookings/:id/dispute — Customer only
+// Raises a dispute on a COMPLETED booking. One dispute per booking.
+// Admin reviews via GET /admin/disputes and resolves via PATCH /admin/disputes/:id/resolve.
+export async function raiseDispute(req: AuthenticatedRequest, res: Response) {
+  const bookingId = String(req.params.id);
+  const customerId = req.user!.id;
+  const { reason } = req.body;
+
+  if (!reason || typeof reason !== "string" || !reason.trim()) {
+    return res.status(400).json({ error: "reason is required" });
+  }
+
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { dispute: true },
+  });
+
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (booking.customerId !== customerId) return res.status(403).json({ error: "Not your booking" });
+  if (booking.status !== "COMPLETED") return res.status(400).json({ error: "Disputes can only be raised on completed bookings" });
+  if (booking.dispute) return res.status(409).json({ error: "A dispute has already been raised for this booking" });
+
+  const dispute = await prisma.dispute.create({
+    data: { bookingId, raisedById: customerId, reason: reason.trim() },
+  });
+
+  // Notify admins via the first admin user (simple MVP approach)
+  const admin = await prisma.user.findFirst({ where: { role: "ADMIN" } });
+  if (admin) {
+    await createNotification(
+      admin.id,
+      "New dispute raised",
+      `A customer raised a dispute on booking ${bookingId.slice(0, 8)}… — please review in the admin panel.`,
+    );
+  }
+
+  res.status(201).json(dispute);
 }
