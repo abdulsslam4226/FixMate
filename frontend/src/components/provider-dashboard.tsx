@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BadgeCheck, Briefcase, CheckCircle2, Clock, Star, TrendingUp, Wallet, XCircle } from "lucide-react";
+import { BadgeCheck, Briefcase, CheckCircle2, Clock, Star, TrendingUp, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -110,12 +110,6 @@ function JobCard({
         <p className="text-muted-foreground border-border/40 rounded-lg border border-dashed p-3 text-sm">
           {booking.notes}
         </p>
-      )}
-
-      {booking.payment?.status === "PAID" && (
-        <span className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 w-fit rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider">
-          Paid · {naira(booking.payment.amountKobo)}
-        </span>
       )}
 
       {booking.review && (
@@ -334,9 +328,6 @@ export function ProviderDashboard({
     onDataChange({ profile: updated, bookings, stats });
   }
 
-  const platformCutKobo = Math.round(stats.totalEarningsKobo * 0.1);
-  const netEarningsKobo = stats.totalEarningsKobo - platformCutKobo;
-
   return (
     <div className="flex flex-col gap-8">
       {/* Header */}
@@ -362,10 +353,10 @@ export function ProviderDashboard({
         <StatCard icon={Clock} label="Pending" value={stats.pending} sub={`${stats.accepted} accepted`} />
         <StatCard icon={CheckCircle2} label="Completed" value={stats.completed} />
         <StatCard
-          icon={Wallet}
-          label="Net earnings"
-          value={naira(netEarningsKobo)}
-          sub={naira(stats.pendingPayoutKobo) + " pending payout"}
+          icon={TrendingUp}
+          label="Price per job"
+          value={naira(profile.pricePerJobKobo)}
+          sub="Paid directly by customer"
         />
       </div>
 

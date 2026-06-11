@@ -6,12 +6,10 @@ import { useSession } from "next-auth/react";
 import {
   AlertTriangle,
   BadgeCheck,
-  Banknote,
   BookOpen,
   CalendarClock,
   CheckCircle2,
   Clock,
-  TrendingUp,
   Users,
   XCircle,
 } from "lucide-react";
@@ -21,7 +19,6 @@ import { AdminNav } from "@/components/admin-nav";
 import { getAdminStats } from "@/lib/api";
 import type { AdminStats, BookingStatus } from "@/lib/types";
 
-const naira = (kobo: number) => `₦${(kobo / 100).toLocaleString("en-NG")}`;
 const fmt = (iso: string) => new Date(iso).toLocaleDateString("en-NG", { dateStyle: "medium" });
 
 const BOOKING_STATUS_CLS: Record<BookingStatus, string> = {
@@ -99,30 +96,6 @@ export default function AdminDashboardPage() {
 
       {stats && (
         <div className="flex flex-col gap-10">
-          {/* Revenue */}
-          <section>
-            <h2 className="text-muted-foreground mb-4 font-mono text-xs uppercase tracking-widest">Revenue</h2>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <StatCard
-                icon={TrendingUp}
-                label="Total collected"
-                value={naira(stats.revenue.totalCollectedKobo)}
-                highlight
-              />
-              <StatCard
-                icon={Banknote}
-                label="Platform commission"
-                value={naira(stats.revenue.platformCommissionKobo)}
-                sub="10% of payments"
-              />
-              <StatCard
-                icon={XCircle}
-                label="Refunded"
-                value={naira(stats.revenue.refundedKobo)}
-              />
-            </div>
-          </section>
-
           {/* Bookings */}
           <section>
             <h2 className="text-muted-foreground mb-4 font-mono text-xs uppercase tracking-widest">Bookings</h2>
@@ -172,14 +145,9 @@ export default function AdminDashboardPage() {
                       </span>
                       <span className="text-muted-foreground font-mono text-xs">{fmt(b.bookingDate)}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {b.payment && (
-                        <span className="font-mono text-sm font-semibold">{naira(b.payment.amountKobo)}</span>
-                      )}
-                      <span className={`border font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${BOOKING_STATUS_CLS[b.status]}`}>
-                        {b.status}
-                      </span>
-                    </div>
+                    <span className={`border font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${BOOKING_STATUS_CLS[b.status]}`}>
+                      {b.status}
+                    </span>
                   </div>
                 ))}
               </div>

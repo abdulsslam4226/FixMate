@@ -6,8 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { cancelBooking, initializePayment, raiseDispute, submitReview, updateBookingStatus } from "@/lib/api";
-import type { Booking, BookingDispute, BookingReview, BookingStatus, Payment } from "@/lib/types";
+import { cancelBooking, raiseDispute, submitReview, updateBookingStatus } from "@/lib/api";
+import type { Booking, BookingDispute, BookingReview, BookingStatus } from "@/lib/types";
 import type { Session } from "next-auth";
 
 const STATUS_VARIANT: Record<BookingStatus, string> = {
@@ -118,29 +118,6 @@ function ReviewForm({
   );
 }
 
-const PAYMENT_LABEL: Record<string, string> = {
-  PENDING: "Awaiting payment",
-  PAID: "Paid",
-  REFUNDED: "Refunded",
-  FAILED: "Payment failed",
-};
-
-const PAYMENT_CLASS: Record<string, string> = {
-  PENDING: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-  PAID: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-  REFUNDED: "bg-sky-500/15 text-sky-400 border-sky-500/30",
-  FAILED: "bg-destructive/15 text-destructive border-destructive/30",
-};
-
-function PaymentBadge({ payment }: { payment: Payment }) {
-  return (
-    <span className={`border font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${PAYMENT_CLASS[payment.status] ?? ""}`}>
-      {PAYMENT_LABEL[payment.status] ?? payment.status}
-      {payment.status === "PAID" && ` · ₦${(payment.amountKobo / 100).toLocaleString("en-NG")}`}
-    </span>
-  );
-}
-
 // Inline form for raising a dispute on a COMPLETED booking.
 function DisputeForm({
   bookingId,
@@ -204,7 +181,6 @@ export function BookingList({ bookings, session }: { bookings: Booking[]; sessio
   const [items, setItems] = useState(bookings);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [payingId, setPayingId] = useState<string | null>(null);
   const isProvider = session.user.role === "PROVIDER";
 
   async function handleStatusChange(id: string, status: BookingStatus) {
@@ -214,17 +190,6 @@ export function BookingList({ bookings, session }: { bookings: Booking[]; sessio
       setItems((prev) => prev.map((b) => (b.id === id ? updated : b)));
     } finally {
       setPendingId(null);
-    }
-  }
-
-  async function handlePay(bookingId: string) {
-    setPayingId(bookingId);
-    try {
-      const { authorizationUrl } = await initializePayment(bookingId, session.apiToken);
-      window.location.href = authorizationUrl;
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Could not start payment. Please try again.");
-      setPayingId(null);
     }
   }
 
@@ -278,15 +243,12 @@ export function BookingList({ bookings, session }: { bookings: Booking[]; sessio
                   : `Artisan: ${booking.provider.user.fullName}`}
               </span>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge
-                variant={STATUS_VARIANT[booking.status] as "default" | "secondary" | "outline" | "destructive"}
-                className={booking.status === "COMPLETED" ? "gradient-violet border-0 text-primary-foreground" : undefined}
-              >
-                {booking.status}
-              </Badge>
-              {booking.payment && <PaymentBadge payment={booking.payment} />}
-            </div>
+            <Badge
+              variant={STATUS_VARIANT[booking.status] as "default" | "secondary" | "outline" | "destructive"}
+              className={booking.status === "COMPLETED" ? "gradient-violet border-0 text-primary-foreground" : undefined}
+            >
+              {booking.status}
+            </Badge>
           </CardHeader>
 
           <CardContent className="flex flex-col gap-3">
@@ -359,31 +321,6 @@ export function BookingList({ bookings, session }: { bookings: Booking[]; sessio
                 <XCircle className="h-4 w-4" />
                 {cancellingId === booking.id ? "Cancelling…" : "Cancel booking"}
               </Button>
-            )}
-
-            {/* Customer: Pay Now */}
-            {!isProvider && booking.status === "ACCEPTED" && booking.payment?.status !== "PAID" && (
-              <div className="border-border/40 flex flex-col gap-2 rounded-lg border border-dashed p-4">
-                <p className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
-                  Payment required
-                </p>
-                <p className="text-sm">
-                  Secure your booking by paying{" "}
-                  <span className="font-semibold">
-                    ₦{(booking.provider.pricePerJobKobo / 100).toLocaleString("en-NG")}
-                  </span>{" "}
-                  to {booking.provider.user.fullName}. Funds are held securely and released when the
-                  job is completed.
-                </p>
-                <Button
-                  size="sm"
-                  disabled={payingId === booking.id}
-                  onClick={() => handlePay(booking.id)}
-                  className="gradient-violet w-fit border-0 text-primary-foreground"
-                >
-                  {payingId === booking.id ? "Redirecting…" : `Pay ₦${(booking.provider.pricePerJobKobo / 100).toLocaleString("en-NG")}`}
-                </Button>
-              </div>
             )}
 
             {/* Customer: submitted review (read-only) */}
