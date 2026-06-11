@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BadgeCheck, MapPin, Star } from "lucide-react";
+import { BadgeCheck, MapPin, Phone, Star, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,15 +73,36 @@ export default async function ProviderProfilePage({ params }: { params: Promise<
             <MapPin className="h-4 w-4 shrink-0" />
             <span>Serves within {provider.operatingRadiusKm} km of their location</span>
           </div>
+
+          <div className="flex items-center gap-1.5 text-sm font-semibold">
+            <Tag className="text-muted-foreground h-4 w-4 shrink-0" />
+            <span>₦{(provider.pricePerJobKobo / 100).toLocaleString("en-NG")} per job</span>
+            <span className="text-muted-foreground font-normal">· paid directly after work is done</span>
+          </div>
+
+          {provider.user.phoneNumber && (
+            <a
+              href={`tel:${provider.user.phoneNumber}`}
+              className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm transition-colors"
+            >
+              <Phone className="h-4 w-4 shrink-0" />
+              {provider.user.phoneNumber}
+            </a>
+          )}
         </div>
       </div>
 
       {/* Book CTA */}
-      <Button
-        nativeButton={false}
-        render={<Link href={`/book/${provider.id}`}>Book {provider.user.fullName.split(" ")[0]}</Link>}
-        className="gradient-violet w-fit border-0 text-primary-foreground"
-      />
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          nativeButton={false}
+          render={<Link href={`/book/${provider.id}`}>Book {provider.user.fullName.split(" ")[0]}</Link>}
+          className="gradient-violet border-0 text-primary-foreground"
+        />
+        <span className="text-muted-foreground text-sm">
+          Free to request — pay ₦{(provider.pricePerJobKobo / 100).toLocaleString("en-NG")} in cash when the job is done
+        </span>
+      </div>
 
       <Separator className="opacity-20" />
 
@@ -96,12 +117,29 @@ export default async function ProviderProfilePage({ params }: { params: Promise<
 
       {/* Reviews */}
       <section className="flex flex-col gap-4">
-        <h2 className="font-heading text-lg font-semibold">
-          Reviews {provider.reviewCount > 0 && <span className="text-muted-foreground font-normal text-base">({provider.reviewCount})</span>}
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-heading text-lg font-semibold">
+            Customer reviews
+            {provider.reviewCount > 0 && (
+              <span className="text-muted-foreground ml-2 font-normal text-base">({provider.reviewCount})</span>
+            )}
+          </h2>
+          {provider.averageRating != null && (
+            <div className="flex items-center gap-2">
+              <StarRow rating={Math.round(provider.averageRating)} />
+              <span className="font-semibold">{provider.averageRating.toFixed(1)}</span>
+              <span className="text-muted-foreground text-sm">/ 5</span>
+            </div>
+          )}
+        </div>
 
         {provider.reviewsReceived.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No reviews yet — be the first to book and leave one.</p>
+          <div className="border-border/40 rounded-xl border border-dashed p-6 text-center">
+            <p className="text-muted-foreground text-sm">No reviews yet.</p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              Be the first to book {provider.user.fullName.split(" ")[0]} and leave a review after the job.
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col gap-4">
             {provider.reviewsReceived.map((review) => (
