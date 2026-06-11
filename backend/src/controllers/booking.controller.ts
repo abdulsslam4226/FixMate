@@ -2,6 +2,7 @@ import { Response } from "express";
 import { prisma } from "../lib/prisma";
 import { triggerBookingSLAWebhook } from "../lib/n8n";
 import { createNotification } from "../lib/notify";
+import { sendNewBookingEmail, sendBookingStatusEmail, sendProviderBookingCancelledEmail } from "../lib/email";
 import { initiateTransfer, createTransferRecipient, refundTransaction } from "../lib/paystack";
 import { AuthenticatedRequest } from "../middleware/auth";
 
@@ -80,15 +81,26 @@ export async function createBooking(req: AuthenticatedRequest, res: Response) {
 
   // Notify the provider that a new job has arrived
   const [providerProfile, customer, category] = await Promise.all([
-    prisma.providerProfile.findUnique({ where: { id: providerId } }),
-    prisma.user.findUnique({ where: { id: customerId }, select: { fullName: true } }),
+    prisma.providerProfile.findUnique({
+      where: { id: providerId },
+      select: { userId: true, user: { select: { fullName: true, email: true } } },
+    }),
+    prisma.user.findUnique({ where: { id: customerId }, select: { fullName: true, email: true } }),
     prisma.serviceCategory.findUnique({ where: { id: categoryId }, select: { name: true } }),
   ]);
   if (providerProfile) {
+    const catName = category?.name ?? "service";
+    const custName = customer?.fullName ?? "A customer";
     await createNotification(
       providerProfile.userId,
       "New booking request",
-      `${customer?.fullName ?? "A customer"} has requested your ${category?.name ?? "service"} on ${new Date(bookingDate).toLocaleDateString("en-NG", { dateStyle: "medium" })}.`,
+      `${custName} has requested your ${catName} on ${new Date(bookingDate).toLocaleDateString("en-NG", { dateStyle: "medium" })}.`,
+    );
+    await sendNewBookingEmail(
+      { email: providerProfile.user.email, fullName: providerProfile.user.fullName },
+      { fullName: custName },
+      catName,
+      new Date(bookingDate),
     );
   }
 
@@ -188,6 +200,18 @@ export async function updateBookingStatus(req: AuthenticatedRequest, res: Respon
   const notif = CUSTOMER_MESSAGES[status];
   if (notif) {
     await createNotification(booking.customerId, notif.title, notif.message);
+    const customerUser = await prisma.user.findUnique({
+      where: { id: booking.customerId },
+      select: { email: true, fullName: true },
+    });
+    if (customerUser) {
+      await sendBookingStatusEmail(
+        customerUser,
+        { fullName: providerName },
+        categoryName,
+        status as "ACCEPTED" | "COMPLETED" | "CANCELLED",
+      );
+    }
   }
 
   res.json(booking);
@@ -274,13 +298,17 @@ export async function cancelBooking(req: AuthenticatedRequest, res: Response) {
   // Notify provider
   const providerProfile = await prisma.providerProfile.findUnique({
     where: { id: booking.providerId },
-    select: { userId: true },
+    select: { userId: true, user: { select: { email: true, fullName: true } } },
   });
   if (providerProfile) {
     await createNotification(
       providerProfile.userId,
       "Booking cancelled",
       `${booking.category.name} booking from a customer has been cancelled.`,
+    );
+    await sendProviderBookingCancelledEmail(
+      { email: providerProfile.user.email, fullName: providerProfile.user.fullName },
+      booking.category.name,
     );
   }
 
