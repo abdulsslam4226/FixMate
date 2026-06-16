@@ -5,7 +5,7 @@ import morgan from "morgan";
 import { attachSession } from "./middleware/auth";
 import authRoutes from "./routes/auth.routes";
 import providerRoutes from "./routes/provider.routes";
-import categoryRoutes from "./routes/category.routes";
+import categoryRoutes, { getPublicStats } from "./routes/category.routes";
 import bookingRoutes from "./routes/booking.routes";
 import adminRoutes from "./routes/admin.routes";
 import automationRoutes from "./routes/automation.routes";
@@ -50,5 +50,7 @@ v1.use("/payments", paymentRoutes);
 app.use("/api/v1", v1);
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
+v1.get("/stats", getPublicStats);
 
 export default app;

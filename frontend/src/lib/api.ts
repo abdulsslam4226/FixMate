@@ -92,6 +92,10 @@ export function getCategories() {
   return apiGet<ServiceCategory[]>("/categories");
 }
 
+export function getPublicStats() {
+  return apiGet<{ verifiedProviders: number; completedBookings: number; totalCategories: number }>("/stats");
+}
+
 export function getProvidersByCategory(
   categoryId: string,
   params?: { lat?: number; lng?: number; q?: string; minRating?: number; sortBy?: string },

@@ -8,6 +8,17 @@ export async function listCategories(_req: Request, res: Response) {
   res.json(categories);
 }
 
+// GET /api/v1/stats — Public
+// Returns lightweight platform trust stats for the landing page.
+export async function getPublicStats(_req: Request, res: Response) {
+  const [verifiedProviders, completedBookings, totalCategories] = await Promise.all([
+    prisma.providerProfile.count({ where: { verificationStatus: "VERIFIED" } }),
+    prisma.booking.count({ where: { status: "COMPLETED" } }),
+    prisma.serviceCategory.count(),
+  ]);
+  res.json({ verifiedProviders, completedBookings, totalCategories });
+}
+
 // Haversine distance in km — used for the proximity matching described in
 // Module 2 ("Geospatial Discovery (Decimal formatted for radius matching)").
 function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {

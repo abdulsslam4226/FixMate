@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/accordion";
 import { ContactForm } from "@/components/contact-form";
 import { getCategoryIcon } from "@/lib/category-icons";
-import { getCategories } from "@/lib/api";
+import { getCategories, getPublicStats } from "@/lib/api";
 
 const HIGHLIGHTS = [
   {
@@ -58,7 +58,10 @@ const FAQS = [
 // Marketing landing page — hero, trust highlights, services preview, FAQ and
 // contact. The categorical discovery experience itself lives at /discover.
 export default async function LandingPage() {
-  const categories = await getCategories();
+  const [categories, stats] = await Promise.all([
+    getCategories(),
+    getPublicStats().catch(() => null),
+  ]);
 
   return (
     <main className="flex flex-1 flex-col">
@@ -90,6 +93,38 @@ export default async function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* Live trust stats */}
+      {stats && (stats.verifiedProviders > 0 || stats.completedBookings > 0) && (
+        <section className="border-border/60 border-y bg-card/40">
+          <div className="mx-auto grid w-full max-w-6xl grid-cols-3 divide-x divide-border/60 px-6 py-8">
+            <div className="flex flex-col items-center gap-1 px-4 text-center">
+              <span className="font-heading text-3xl font-extrabold sm:text-4xl">
+                {stats.verifiedProviders}
+              </span>
+              <span className="text-muted-foreground font-mono text-xs uppercase tracking-widest">
+                Verified artisans
+              </span>
+            </div>
+            <div className="flex flex-col items-center gap-1 px-4 text-center">
+              <span className="font-heading text-3xl font-extrabold sm:text-4xl">
+                {stats.totalCategories}
+              </span>
+              <span className="text-muted-foreground font-mono text-xs uppercase tracking-widest">
+                Service categories
+              </span>
+            </div>
+            <div className="flex flex-col items-center gap-1 px-4 text-center">
+              <span className="font-heading text-3xl font-extrabold sm:text-4xl">
+                {stats.completedBookings > 0 ? stats.completedBookings : "2hr"}
+              </span>
+              <span className="text-muted-foreground font-mono text-xs uppercase tracking-widest">
+                {stats.completedBookings > 0 ? "Jobs completed" : "Response SLA"}
+              </span>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* About / trust highlights */}
       <section id="about" className="mx-auto flex w-full max-w-6xl scroll-mt-20 flex-col gap-8 px-6 py-20">
