@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import Link from "next/link";
 import { cancelBooking, confirmBookingComplete, raiseDispute, submitReview, updateBookingStatus } from "@/lib/api";
 import { MessageThread } from "@/components/message-thread";
 import type { Booking, BookingDispute, BookingReview, BookingStatus } from "@/lib/types";
@@ -372,6 +373,16 @@ export function BookingList({ bookings, session }: { bookings: Booking[]; sessio
                 <XCircle className="h-4 w-4" />
                 {cancellingId === booking.id ? "Cancelling…" : "Cancel booking"}
               </Button>
+            )}
+
+            {/* Customer: book again */}
+            {!isProvider && booking.status === "COMPLETED" && (
+              <Link
+                href={`/book/${booking.providerId}?categoryId=${booking.categoryId}`}
+                className="text-muted-foreground hover:text-foreground w-fit font-mono text-xs underline underline-offset-2 transition-colors"
+              >
+                Book {booking.provider.user.fullName.split(" ")[0]} again →
+              </Link>
             )}
 
             {/* Customer: submitted review (read-only) */}

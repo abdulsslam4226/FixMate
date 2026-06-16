@@ -196,6 +196,8 @@ export interface BookingDispute {
 
 export interface Booking {
   id: string;
+  providerId: string;
+  categoryId: string;
   status: BookingStatus;
   bookingDate: string;
   notes: string;
