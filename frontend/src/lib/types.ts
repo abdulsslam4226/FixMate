@@ -75,6 +75,8 @@ export interface ProviderProfile {
   user: { fullName: string; phoneNumber: string };
   category: { name: string; description: string };
   portfolioImages: PortfolioImage[];
+  availability: ProviderAvailability | null;
+  blockouts: ProviderBlockout[];
   reviewsReceived: Array<{
     id: string;
     rating: number;
@@ -114,6 +116,20 @@ export interface DashboardStats {
   pendingPayoutKobo: number;
 }
 
+export interface ProviderAvailability {
+  mon: boolean;
+  tue: boolean;
+  wed: boolean;
+  thu: boolean;
+  fri: boolean;
+  sat: boolean;
+  sun: boolean;
+}
+
+export interface ProviderBlockout {
+  blockedDate: string; // YYYY-MM-DD
+}
+
 export interface PortfolioImage {
   id: string;
   imageUrl: string;
@@ -133,6 +149,8 @@ export interface DashboardProfile {
   selfieUrl: string;
   category: { name: string };
   portfolioImages: PortfolioImage[];
+  availability: ProviderAvailability | null;
+  blockouts: ProviderBlockout[];
 }
 
 export interface DashboardBooking {

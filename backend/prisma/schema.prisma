@@ -114,9 +114,9 @@ model ProviderProfile {
   // Relations
   jobsReceived       Booking[]        @relation("ProviderToBooking")
   reviewsReceived    Review[]         @relation("ProviderToReview")
-
-  // Relations
   portfolioImages    PortfolioImage[]
+  availability       ProviderAvailability?
+  blockouts          ProviderBlockout[]
 }
 
 model ServiceCategory {
@@ -201,6 +201,32 @@ model Notification {
   message    String   @db.Text
   isRead     Boolean  @default(false)
   createdAt  DateTime @default(now())
+}
+
+// One row per provider. Absent row = available every day (backwards compatible).
+model ProviderAvailability {
+  id         String          @id @default(uuid())
+  providerId String          @unique
+  provider   ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  mon        Boolean         @default(true)
+  tue        Boolean         @default(true)
+  wed        Boolean         @default(true)
+  thu        Boolean         @default(true)
+  fri        Boolean         @default(true)
+  sat        Boolean         @default(true)
+  sun        Boolean         @default(false)
+  updatedAt  DateTime        @updatedAt
+}
+
+model ProviderBlockout {
+  id          String          @id @default(uuid())
+  providerId  String
+  provider    ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  blockedDate DateTime        @db.Date
+  createdAt   DateTime        @default(now())
+
+  @@unique([providerId, blockedDate])
+  @@index([providerId])
 }
 
 model Message {

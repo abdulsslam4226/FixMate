@@ -9,13 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { addPortfolioImage, deletePortfolioImage, updateBookingStatus, updateProviderProfile, uploadPortfolioImage } from "@/lib/api";
+import { addBlockout, addPortfolioImage, deletePortfolioImage, removeBlockout, updateAvailability, updateBookingStatus, updateProviderProfile, uploadPortfolioImage } from "@/lib/api";
 import { MessageThread } from "@/components/message-thread";
 import type {
   BookingStatus,
   DashboardBooking,
   DashboardProfile,
   PortfolioImage,
+  ProviderAvailability,
+  ProviderBlockout,
   ProviderDashboardData,
 } from "@/lib/types";
 import type { Session } from "next-auth";
@@ -446,6 +448,163 @@ function PortfolioEditor({
   );
 }
 
+// ─── Availability editor ──────────────────────────────────────────────────────
+
+const DAYS: { key: keyof ProviderAvailability; label: string }[] = [
+  { key: "mon", label: "Mon" },
+  { key: "tue", label: "Tue" },
+  { key: "wed", label: "Wed" },
+  { key: "thu", label: "Thu" },
+  { key: "fri", label: "Fri" },
+  { key: "sat", label: "Sat" },
+  { key: "sun", label: "Sun" },
+];
+
+const DEFAULT_AVAIL: ProviderAvailability = { mon: true, tue: true, wed: true, thu: true, fri: true, sat: true, sun: false };
+
+function AvailabilityEditor({
+  availability: initialAvailability,
+  blockouts: initialBlockouts,
+  apiToken,
+}: {
+  availability: ProviderAvailability | null;
+  blockouts: ProviderBlockout[];
+  apiToken: string;
+}) {
+  const [avail, setAvail] = useState<ProviderAvailability>(initialAvailability ?? DEFAULT_AVAIL);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const [blockouts, setBlockouts] = useState<ProviderBlockout[]>(initialBlockouts);
+  const [newDate, setNewDate] = useState("");
+  const [addingDate, setAddingDate] = useState(false);
+  const [removingDate, setRemovingDate] = useState<string | null>(null);
+  const [dateError, setDateError] = useState<string | null>(null);
+
+  async function toggleDay(key: keyof ProviderAvailability) {
+    const next = { ...avail, [key]: !avail[key] };
+    setAvail(next);
+    setSaving(true);
+    setSaved(false);
+    try {
+      await updateAvailability(next, apiToken);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAddBlockout() {
+    if (!newDate) return;
+    setAddingDate(true);
+    setDateError(null);
+    try {
+      const added = await addBlockout(newDate, apiToken);
+      setBlockouts((prev) => [...prev, { blockedDate: added.blockedDate }].sort());
+      setNewDate("");
+    } catch (err) {
+      setDateError(err instanceof Error ? err.message : "Could not add date.");
+    } finally {
+      setAddingDate(false);
+    }
+  }
+
+  async function handleRemoveBlockout(date: string) {
+    setRemovingDate(date);
+    try {
+      await removeBlockout(date, apiToken);
+      setBlockouts((prev) => prev.filter((b) => b.blockedDate !== date));
+    } finally {
+      setRemovingDate(null);
+    }
+  }
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Weekly schedule */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <p className="font-mono text-xs uppercase tracking-wide text-muted-foreground">Working days</p>
+          {saving && <span className="font-mono text-[10px] text-muted-foreground">Saving…</span>}
+          {saved && !saving && <span className="font-mono text-[10px] text-emerald-400">Saved ✓</span>}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {DAYS.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => toggleDay(key)}
+              className={`h-9 w-12 rounded-lg border font-mono text-xs font-medium transition-colors ${
+                avail[key]
+                  ? "gradient-violet border-0 text-primary-foreground"
+                  : "border-border/60 text-muted-foreground hover:border-border"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="text-muted-foreground text-xs">
+          Customers can only request bookings on your working days.
+        </p>
+      </div>
+
+      {/* Blocked dates */}
+      <div className="flex flex-col gap-3">
+        <p className="font-mono text-xs uppercase tracking-wide text-muted-foreground">Blocked dates</p>
+        <p className="text-muted-foreground text-xs">
+          Mark specific dates you&apos;re unavailable — public holidays, travel, etc.
+        </p>
+
+        {blockouts.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {blockouts.map((b) => (
+              <span
+                key={b.blockedDate}
+                className="border-border/60 flex items-center gap-1.5 rounded-lg border px-2.5 py-1 font-mono text-xs"
+              >
+                {b.blockedDate}
+                <button
+                  type="button"
+                  onClick={() => handleRemoveBlockout(b.blockedDate)}
+                  disabled={removingDate === b.blockedDate}
+                  className="text-muted-foreground hover:text-destructive transition-colors"
+                  aria-label={`Remove ${b.blockedDate}`}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="date"
+            value={newDate}
+            min={todayStr}
+            onChange={(e) => setNewDate(e.target.value)}
+            className="border-input bg-input/30 focus-visible:ring-ring/50 focus-visible:border-ring h-8 rounded-lg border px-3 font-mono text-sm outline-none focus-visible:ring-2"
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!newDate || addingDate}
+            onClick={handleAddBlockout}
+          >
+            {addingDate ? "Adding…" : "Block date"}
+          </Button>
+        </div>
+        {dateError && <p className="text-destructive text-xs">{dateError}</p>}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main dashboard ───────────────────────────────────────────────────────────
 
 export function ProviderDashboard({
@@ -646,6 +805,19 @@ export function ProviderDashboard({
                   const updated = { ...profile, portfolioImages: profile.portfolioImages.filter((i) => i.id !== id) };
                   onDataChange({ profile: updated, bookings, stats });
                 }}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/60">
+            <CardHeader>
+              <CardTitle className="font-heading text-base">Availability</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AvailabilityEditor
+                availability={profile.availability}
+                blockouts={profile.blockouts}
+                apiToken={session.apiToken}
               />
             </CardContent>
           </Card>

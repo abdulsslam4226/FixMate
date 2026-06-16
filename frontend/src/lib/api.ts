@@ -17,6 +17,8 @@ import {
   OnboardedProvider,
   Payment,
   PortfolioImage,
+  ProviderAvailability,
+  ProviderBlockout,
   ProviderDashboardData,
   ProviderProfile,
   ProviderSummary,
@@ -202,6 +204,23 @@ export async function uploadPortfolioImage(file: File, apiToken: string): Promis
 
 export function addPortfolioImage(imageUrl: string, caption: string | undefined, apiToken: string) {
   return apiPost<PortfolioImage>("/providers/portfolio", { imageUrl, caption }, apiToken);
+}
+
+export function updateAvailability(days: Partial<ProviderAvailability>, apiToken: string) {
+  return apiPatch<ProviderAvailability>("/providers/availability", days, apiToken);
+}
+
+export function addBlockout(date: string, apiToken: string) {
+  return apiPost<ProviderBlockout>("/providers/blockouts", { date }, apiToken);
+}
+
+export function removeBlockout(date: string, apiToken: string) {
+  return fetch(`${API_BASE_URL}/providers/blockouts/${date}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${apiToken}` },
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Remove blockout failed (${res.status})`);
+  });
 }
 
 export function deletePortfolioImage(imageId: string, apiToken: string) {

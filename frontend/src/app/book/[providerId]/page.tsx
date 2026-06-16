@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useSearchParams, useParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -9,10 +9,43 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { createBooking } from "@/lib/api";
+import { createBooking, getProvider } from "@/lib/api";
+import type { ProviderAvailability, ProviderBlockout } from "@/lib/types";
 
-// Customer-facing booking request — POST /api/v1/bookings (Module 3.3). Fires
-// the n8n 2-hour SLA workflow on the backend once submitted (Module 3.2-C).
+const DAY_NAMES: (keyof ProviderAvailability)[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+const DAY_LABELS: Record<keyof ProviderAvailability, string> = {
+  sun: "Sun", mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat",
+};
+
+function availableDaysList(avail: ProviderAvailability): string {
+  return DAY_NAMES.filter((d) => avail[d]).map((d) => DAY_LABELS[d]).join(", ");
+}
+
+function validateDate(
+  dateStr: string,
+  avail: ProviderAvailability | null,
+  blockouts: ProviderBlockout[],
+): string | null {
+  if (!dateStr) return null;
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return null;
+  if (date <= new Date()) return "Please choose a future date.";
+
+  if (avail) {
+    const dayKey = DAY_NAMES[date.getDay()];
+    if (!avail[dayKey]) {
+      return `This artisan doesn't work on ${DAY_LABELS[dayKey]}s. Available: ${availableDaysList(avail)}.`;
+    }
+  }
+
+  const dateOnly = dateStr.slice(0, 10);
+  if (blockouts.some((b) => b.blockedDate.slice(0, 10) === dateOnly)) {
+    return "This artisan has marked that date as unavailable.";
+  }
+
+  return null;
+}
+
 export default function BookProviderPage() {
   const params = useParams<{ providerId: string }>();
   const searchParams = useSearchParams();
@@ -24,9 +57,24 @@ export default function BookProviderPage() {
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "success">("idle");
   const [error, setError] = useState<string | null>(null);
 
+  const [availability, setAvailability] = useState<ProviderAvailability | null>(null);
+  const [blockouts, setBlockouts] = useState<ProviderBlockout[]>([]);
+
+  useEffect(() => {
+    getProvider(params.providerId)
+      .then((p) => {
+        setAvailability(p.availability);
+        setBlockouts(p.blockouts ?? []);
+      })
+      .catch(() => {/* no availability data — backend still validates */});
+  }, [params.providerId]);
+
+  const dateWarning = validateDate(bookingDate, availability, blockouts);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!session) return;
+    if (dateWarning) { setError(dateWarning); return; }
 
     setStatus("loading");
     setError(null);
@@ -48,9 +96,7 @@ export default function BookProviderPage() {
     }
   }
 
-  if (sessionStatus === "loading") {
-    return null;
-  }
+  if (sessionStatus === "loading") return null;
 
   if (!session) {
     return (
@@ -96,6 +142,12 @@ export default function BookProviderPage() {
         </p>
       </div>
 
+      {availability && (
+        <p className="text-muted-foreground font-mono text-xs">
+          Available: {availableDaysList(availability)}
+        </p>
+      )}
+
       <Card className="border-border/60">
         <CardHeader>
           <CardTitle className="font-heading text-base">Booking details</CardTitle>
@@ -109,9 +161,12 @@ export default function BookProviderPage() {
                 name="bookingDate"
                 type="datetime-local"
                 value={bookingDate}
-                onChange={(e) => setBookingDate(e.target.value)}
+                onChange={(e) => { setBookingDate(e.target.value); setError(null); }}
                 required
               />
+              {bookingDate && dateWarning && (
+                <p className="text-amber-400 text-xs">{dateWarning}</p>
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="notes">What do you need help with?</Label>
@@ -127,7 +182,11 @@ export default function BookProviderPage() {
 
             {status === "error" && <p className="text-destructive text-sm">{error}</p>}
 
-            <Button type="submit" disabled={status === "loading"} className="gradient-violet border-0 text-primary-foreground">
+            <Button
+              type="submit"
+              disabled={status === "loading" || !!dateWarning}
+              className="gradient-violet border-0 text-primary-foreground"
+            >
               {status === "loading" ? "Sending request…" : "Send booking request"}
             </Button>
           </form>

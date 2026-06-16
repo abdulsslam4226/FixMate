@@ -60,12 +60,43 @@ export async function createBooking(req: AuthenticatedRequest, res: Response) {
     return res.status(400).json({ error: "providerId, categoryId, bookingDate and notes are required" });
   }
 
+  const requestedDate = new Date(bookingDate);
+  if (isNaN(requestedDate.getTime()) || requestedDate <= new Date()) {
+    return res.status(400).json({ error: "bookingDate must be a valid future date" });
+  }
+
+  // Check provider availability
+  const [availability, blockouts] = await Promise.all([
+    prisma.providerAvailability.findUnique({ where: { providerId } }),
+    prisma.providerBlockout.findMany({
+      where: {
+        providerId,
+        blockedDate: {
+          gte: new Date(`${requestedDate.toISOString().slice(0, 10)}T00:00:00.000Z`),
+          lte: new Date(`${requestedDate.toISOString().slice(0, 10)}T23:59:59.999Z`),
+        },
+      },
+    }),
+  ]);
+
+  const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+  if (availability) {
+    const dayKey = DAY_KEYS[requestedDate.getUTCDay()];
+    if (!availability[dayKey]) {
+      return res.status(400).json({ error: "The provider is not available on that day of the week" });
+    }
+  }
+
+  if (blockouts.length > 0) {
+    return res.status(400).json({ error: "The provider has marked that date as unavailable" });
+  }
+
   const booking = await prisma.booking.create({
     data: {
       customerId,
       providerId,
       categoryId,
-      bookingDate: new Date(bookingDate),
+      bookingDate: requestedDate,
       notes,
     },
   });

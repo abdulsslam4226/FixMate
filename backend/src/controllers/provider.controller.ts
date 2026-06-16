@@ -107,6 +107,8 @@ export async function onboard(req: AuthenticatedRequest, res: Response) {
   });
 }
 
+const NINETY_DAYS = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+
 // GET /api/v1/providers/dashboard — Provider auth
 // Returns the authenticated provider's stats, recent bookings, and editable
 // profile fields in one request so the dashboard page only makes one round-trip.
@@ -118,6 +120,11 @@ export async function getDashboard(req: AuthenticatedRequest, res: Response) {
     include: {
       category: { select: { name: true } },
       portfolioImages: { orderBy: { createdAt: "asc" } },
+      availability: true,
+      blockouts: {
+        where: { blockedDate: { gte: new Date() } },
+        orderBy: { blockedDate: "asc" },
+      },
     },
   });
   if (!profile) {
@@ -231,6 +238,82 @@ export async function deletePortfolioImage(req: AuthenticatedRequest, res: Respo
   res.json({ ok: true });
 }
 
+// PATCH /api/v1/providers/availability — Provider only
+// Upserts the provider's weekly working-day schedule (7 boolean flags).
+export async function updateAvailability(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user!.id;
+  const { mon, tue, wed, thu, fri, sat, sun } = req.body;
+
+  const profile = await prisma.providerProfile.findUnique({ where: { userId } });
+  if (!profile) return res.status(404).json({ error: "Provider profile not found" });
+
+  const data = {
+    ...(mon !== undefined && { mon: Boolean(mon) }),
+    ...(tue !== undefined && { tue: Boolean(tue) }),
+    ...(wed !== undefined && { wed: Boolean(wed) }),
+    ...(thu !== undefined && { thu: Boolean(thu) }),
+    ...(fri !== undefined && { fri: Boolean(fri) }),
+    ...(sat !== undefined && { sat: Boolean(sat) }),
+    ...(sun !== undefined && { sun: Boolean(sun) }),
+  };
+
+  const availability = await prisma.providerAvailability.upsert({
+    where: { providerId: profile.id },
+    update: data,
+    create: { providerId: profile.id, ...data },
+  });
+
+  res.json(availability);
+}
+
+// POST /api/v1/providers/blockouts — Provider only
+// Adds a specific blocked-out date (YYYY-MM-DD) to the provider's calendar.
+export async function addBlockout(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user!.id;
+  const { date } = req.body;
+
+  if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: "date must be YYYY-MM-DD" });
+  }
+
+  const blockedDate = new Date(`${date}T00:00:00.000Z`);
+  if (isNaN(blockedDate.getTime()) || blockedDate < new Date()) {
+    return res.status(400).json({ error: "date must be a valid future date" });
+  }
+
+  const profile = await prisma.providerProfile.findUnique({ where: { userId } });
+  if (!profile) return res.status(404).json({ error: "Provider profile not found" });
+
+  const blockout = await prisma.providerBlockout.upsert({
+    where: { providerId_blockedDate: { providerId: profile.id, blockedDate } },
+    update: {},
+    create: { providerId: profile.id, blockedDate },
+  });
+
+  res.status(201).json({ ...blockout, blockedDate: date });
+}
+
+// DELETE /api/v1/providers/blockouts/:date — Provider only
+// Removes a blocked-out date from the provider's calendar.
+export async function removeBlockout(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user!.id;
+  const date = String(req.params.date);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: "date must be YYYY-MM-DD" });
+  }
+
+  const profile = await prisma.providerProfile.findUnique({ where: { userId } });
+  if (!profile) return res.status(404).json({ error: "Provider profile not found" });
+
+  const blockedDate = new Date(`${date}T00:00:00.000Z`);
+  await prisma.providerBlockout.deleteMany({
+    where: { providerId: profile.id, blockedDate },
+  });
+
+  res.json({ ok: true });
+}
+
 // GET /api/v1/providers/:id — Public
 // Returns a single provider's full public profile (for the customer-facing
 // provider page). Only VERIFIED providers are visible to the public.
@@ -242,14 +325,16 @@ export async function getProvider(req: AuthenticatedRequest, res: Response) {
     include: {
       ...PROVIDER_INCLUDE,
       reviewsReceived: {
-        include: {
-          customer: { select: { fullName: true } },
-        },
+        include: { customer: { select: { fullName: true } } },
         orderBy: { createdAt: "desc" },
         take: 10,
       },
-      portfolioImages: {
-        orderBy: { createdAt: "asc" },
+      portfolioImages: { orderBy: { createdAt: "asc" } },
+      availability: true,
+      blockouts: {
+        where: { blockedDate: { gte: new Date(), lte: NINETY_DAYS } },
+        orderBy: { blockedDate: "asc" },
+        select: { blockedDate: true },
       },
     },
   });
