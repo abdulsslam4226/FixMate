@@ -74,6 +74,7 @@ export interface ProviderProfile {
   reviewCount: number;
   user: { fullName: string; phoneNumber: string };
   category: { name: string; description: string };
+  portfolioImages: PortfolioImage[];
   reviewsReceived: Array<{
     id: string;
     rating: number;
@@ -113,6 +114,13 @@ export interface DashboardStats {
   pendingPayoutKobo: number;
 }
 
+export interface PortfolioImage {
+  id: string;
+  imageUrl: string;
+  caption: string | null;
+  createdAt: string;
+}
+
 export interface DashboardProfile {
   id: string;
   bio: string;
@@ -124,6 +132,7 @@ export interface DashboardProfile {
   accountNumber: string | null;
   selfieUrl: string;
   category: { name: string };
+  portfolioImages: PortfolioImage[];
 }
 
 export interface DashboardBooking {

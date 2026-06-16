@@ -115,7 +115,10 @@ export async function getDashboard(req: AuthenticatedRequest, res: Response) {
 
   const profile = await prisma.providerProfile.findUnique({
     where: { userId },
-    include: { category: { select: { name: true } } },
+    include: {
+      category: { select: { name: true } },
+      portfolioImages: { orderBy: { createdAt: "asc" } },
+    },
   });
   if (!profile) {
     return res.status(404).json({ error: "Provider profile not found. Complete onboarding first." });
@@ -181,6 +184,53 @@ export async function updateProviderProfile(req: AuthenticatedRequest, res: Resp
   res.json(updated);
 }
 
+// POST /api/v1/providers/portfolio — Provider only
+// Adds a portfolio image to the authenticated provider's profile. Capped at 6
+// images so profiles stay focused.
+export async function addPortfolioImage(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user!.id;
+  const { imageUrl, caption } = req.body;
+
+  if (!imageUrl || typeof imageUrl !== "string") {
+    return res.status(400).json({ error: "imageUrl is required" });
+  }
+
+  const profile = await prisma.providerProfile.findUnique({ where: { userId } });
+  if (!profile) return res.status(404).json({ error: "Provider profile not found" });
+
+  const count = await prisma.portfolioImage.count({ where: { providerId: profile.id } });
+  if (count >= 6) {
+    return res.status(400).json({ error: "Maximum of 6 portfolio images allowed" });
+  }
+
+  const image = await prisma.portfolioImage.create({
+    data: {
+      providerId: profile.id,
+      imageUrl,
+      caption: typeof caption === "string" && caption.trim() ? caption.trim() : null,
+    },
+  });
+
+  res.status(201).json(image);
+}
+
+// DELETE /api/v1/providers/portfolio/:imageId — Provider only
+// Removes a portfolio image — only the owning provider can delete their own images.
+export async function deletePortfolioImage(req: AuthenticatedRequest, res: Response) {
+  const userId = req.user!.id;
+  const imageId = String(req.params.imageId);
+
+  const profile = await prisma.providerProfile.findUnique({ where: { userId } });
+  if (!profile) return res.status(404).json({ error: "Provider profile not found" });
+
+  const image = await prisma.portfolioImage.findUnique({ where: { id: imageId } });
+  if (!image) return res.status(404).json({ error: "Image not found" });
+  if (image.providerId !== profile.id) return res.status(403).json({ error: "Not your image" });
+
+  await prisma.portfolioImage.delete({ where: { id: imageId } });
+  res.json({ ok: true });
+}
+
 // GET /api/v1/providers/:id — Public
 // Returns a single provider's full public profile (for the customer-facing
 // provider page). Only VERIFIED providers are visible to the public.
@@ -197,6 +247,9 @@ export async function getProvider(req: AuthenticatedRequest, res: Response) {
         },
         orderBy: { createdAt: "desc" },
         take: 10,
+      },
+      portfolioImages: {
+        orderBy: { createdAt: "asc" },
       },
     },
   });

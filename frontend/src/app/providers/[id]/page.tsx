@@ -113,6 +113,30 @@ export default async function ProviderProfilePage({ params }: { params: Promise<
         <p className="text-muted-foreground text-sm">{provider.category.description}</p>
       </section>
 
+      {/* Portfolio */}
+      {provider.portfolioImages.length > 0 && (
+        <>
+          <Separator className="opacity-20" />
+          <section className="flex flex-col gap-4">
+            <h2 className="font-heading text-lg font-semibold">Portfolio</h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {provider.portfolioImages.map((img) => (
+                <div key={img.id} className="flex flex-col gap-1">
+                  <img
+                    src={img.imageUrl}
+                    alt={img.caption ?? "Portfolio photo"}
+                    className="h-40 w-full rounded-xl object-cover ring-1 ring-white/10"
+                  />
+                  {img.caption && (
+                    <p className="text-muted-foreground font-mono text-xs">{img.caption}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
+
       <Separator className="opacity-20" />
 
       {/* Reviews */}

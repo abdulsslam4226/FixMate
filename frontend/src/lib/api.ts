@@ -15,6 +15,7 @@ import {
   Notification,
   OnboardedProvider,
   Payment,
+  PortfolioImage,
   ProviderDashboardData,
   ProviderProfile,
   ProviderSummary,
@@ -176,6 +177,35 @@ export async function uploadSelfie(file: File, apiToken: string): Promise<string
   }
   const { url } = (await res.json()) as { url: string };
   return url;
+}
+
+export async function uploadPortfolioImage(file: File, apiToken: string): Promise<string> {
+  const form = new FormData();
+  form.append("image", file);
+  const res = await fetch(`${API_BASE_URL}/upload/portfolio`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiToken}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(payload?.error ?? `Upload failed (${res.status})`);
+  }
+  const { url } = (await res.json()) as { url: string };
+  return url;
+}
+
+export function addPortfolioImage(imageUrl: string, caption: string | undefined, apiToken: string) {
+  return apiPost<PortfolioImage>("/providers/portfolio", { imageUrl, caption }, apiToken);
+}
+
+export function deletePortfolioImage(imageId: string, apiToken: string) {
+  return fetch(`${API_BASE_URL}/providers/portfolio/${imageId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${apiToken}` },
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+  });
 }
 
 export function getProvider(id: string) {

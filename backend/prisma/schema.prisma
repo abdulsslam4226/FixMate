@@ -114,11 +114,8 @@ model ProviderProfile {
   jobsReceived       Booking[]        @relation("ProviderToBooking")
   reviewsReceived    Review[]         @relation("ProviderToReview")
 
-  // ==========================================
-  // PHASE 2 DROP-IN PLACEHOLDERS (DO NOT UNCOMMENT IN PHASE 1)
-  // portfolioImages   PortfolioImage[]
-  // walletBalance     Decimal          @default(0.00)
-  // ==========================================
+  // Relations
+  portfolioImages    PortfolioImage[]
 }
 
 model ServiceCategory {
@@ -204,13 +201,11 @@ model Notification {
   createdAt  DateTime @default(now())
 }
 
-// ==========================================
-// PHASE 2 NEW MODELS (DO NOT BUILD IN PHASE 1)
-// model PortfolioImage {
-//   id          String          @id @default(uuid())
-//   providerId  String
-//   provider    ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
-//   imageUrl    String
-//   createdAt   DateTime        @default(now())
-// }
-// ==========================================
+model PortfolioImage {
+  id         String          @id @default(uuid())
+  providerId String
+  provider   ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  imageUrl   String
+  caption    String?         @db.Text
+  createdAt  DateTime        @default(now())
+}

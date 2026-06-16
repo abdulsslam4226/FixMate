@@ -9,11 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { updateBookingStatus, updateProviderProfile } from "@/lib/api";
+import { addPortfolioImage, deletePortfolioImage, updateBookingStatus, updateProviderProfile, uploadPortfolioImage } from "@/lib/api";
 import type {
   BookingStatus,
   DashboardBooking,
   DashboardProfile,
+  PortfolioImage,
   ProviderDashboardData,
 } from "@/lib/types";
 import type { Session } from "next-auth";
@@ -286,6 +287,138 @@ function ProfileEditor({
   );
 }
 
+// ─── Portfolio editor ─────────────────────────────────────────────────────────
+
+function PortfolioEditor({
+  images,
+  apiToken,
+  onAdded,
+  onDeleted,
+}: {
+  images: PortfolioImage[];
+  apiToken: string;
+  onAdded: (img: PortfolioImage) => void;
+  onDeleted: (id: string) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [caption, setCaption] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const imageUrl = await uploadPortfolioImage(file, apiToken);
+      const img = await addPortfolioImage(imageUrl, caption.trim() || undefined, apiToken);
+      onAdded(img);
+      setCaption("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    try {
+      await deletePortfolioImage(id, apiToken);
+      onDeleted(id);
+    } catch {
+      // silently ignore — image stays visible
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const atLimit = images.length >= 6;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex flex-col gap-0.5">
+          <p className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+            Portfolio photos
+          </p>
+          <p className="text-muted-foreground text-xs">
+            Show customers your past work. Up to 6 photos.
+          </p>
+        </div>
+        <span className="font-mono text-xs text-muted-foreground">{images.length}/6</span>
+      </div>
+
+      {/* Image grid */}
+      {images.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {images.map((img) => (
+            <div key={img.id} className="group relative">
+              <img
+                src={img.imageUrl}
+                alt={img.caption ?? "Portfolio image"}
+                className="h-32 w-full rounded-lg object-cover ring-1 ring-white/10"
+              />
+              {img.caption && (
+                <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{img.caption}</p>
+              )}
+              <button
+                onClick={() => handleDelete(img.id)}
+                disabled={deletingId === img.id}
+                className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-destructive"
+                aria-label="Remove photo"
+              >
+                <XCircle className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Upload */}
+      {!atLimit && (
+        <div className="flex flex-col gap-2">
+          <input
+            type="text"
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            placeholder="Caption (optional) — e.g. Bathroom plumbing repair, Lekki"
+            className="border-input bg-input/30 focus-visible:ring-ring/50 focus-visible:border-ring h-8 rounded-lg border px-3 text-sm outline-none focus-visible:ring-2"
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleFileChange}
+            className="hidden"
+            id="portfolioInput"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={uploading}
+            onClick={() => document.getElementById("portfolioInput")?.click()}
+            className="w-fit"
+          >
+            {uploading ? "Uploading…" : "Add photo"}
+          </Button>
+          {error && <p className="text-destructive text-xs">{error}</p>}
+        </div>
+      )}
+
+      {atLimit && (
+        <p className="text-muted-foreground font-mono text-xs">
+          Maximum reached — remove a photo to add a new one.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ─── Main dashboard ───────────────────────────────────────────────────────────
 
 export function ProviderDashboard({
@@ -454,18 +587,40 @@ export function ProviderDashboard({
 
       {/* Profile tab */}
       {tab === "profile" && (
-        <Card className="border-border/60">
-          <CardHeader>
-            <CardTitle className="font-heading text-base">Profile &amp; payout settings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ProfileEditor
-              profile={profile}
-              apiToken={session.apiToken}
-              onSaved={handleProfileSaved}
-            />
-          </CardContent>
-        </Card>
+        <div className="flex flex-col gap-6">
+          <Card className="border-border/60">
+            <CardHeader>
+              <CardTitle className="font-heading text-base">Profile &amp; payout settings</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ProfileEditor
+                profile={profile}
+                apiToken={session.apiToken}
+                onSaved={handleProfileSaved}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/60">
+            <CardHeader>
+              <CardTitle className="font-heading text-base">Portfolio</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PortfolioEditor
+                images={profile.portfolioImages}
+                apiToken={session.apiToken}
+                onAdded={(img) => {
+                  const updated = { ...profile, portfolioImages: [...profile.portfolioImages, img] };
+                  onDataChange({ profile: updated, bookings, stats });
+                }}
+                onDeleted={(id) => {
+                  const updated = { ...profile, portfolioImages: profile.portfolioImages.filter((i) => i.id !== id) };
+                  onDataChange({ profile: updated, bookings, stats });
+                }}
+              />
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );

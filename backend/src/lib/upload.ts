@@ -32,8 +32,36 @@ export const selfieUpload = multer({
   },
 }).single("selfie");
 
-// Returns the public URL for a stored upload (relative to the Express server).
-export function selfiePublicUrl(filename: string): string {
+const portfolioStorage: StorageEngine = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
+    const unique = crypto.randomBytes(16).toString("hex");
+    cb(null, `portfolio-${unique}${ext}`);
+  },
+});
+
+export const portfolioUpload = multer({
+  storage: portfolioStorage,
+  limits: { fileSize: MAX_FILE_SIZE_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_MIME.has(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only JPEG, PNG and WebP images are accepted"));
+    }
+  },
+}).single("image");
+
+function publicUrl(filename: string): string {
   const base = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 4000}`;
   return `${base}/uploads/${filename}`;
+}
+
+export function selfiePublicUrl(filename: string): string {
+  return publicUrl(filename);
+}
+
+export function portfolioPublicUrl(filename: string): string {
+  return publicUrl(filename);
 }
