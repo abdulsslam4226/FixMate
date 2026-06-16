@@ -3,9 +3,9 @@
 // the UI layer can be reshaped later without touching the data contracts.
 
 export type VerifyStatus = "PENDING" | "VERIFIED" | "REJECTED";
-export type BookingStatus = "PENDING" | "ACCEPTED" | "COMPLETED" | "CANCELLED";
+export type BookingStatus = "PENDING" | "ACCEPTED" | "AWAITING_CONFIRMATION" | "COMPLETED" | "CANCELLED";
 export type PaymentStatus = "PENDING" | "PAID" | "REFUNDED" | "FAILED";
-export type DisputeStatus = "OPEN" | "RESOLVED_REFUND" | "RESOLVED_RELEASE";
+export type DisputeStatus = "OPEN" | "RESOLVED";
 
 export interface ServiceCategory {
   id: string;
@@ -185,7 +185,7 @@ export interface AdminStats {
   revenue: { totalCollectedKobo: number; platformCommissionKobo: number; refundedKobo: number };
   providers: { total: number; verified: number; pending: number; rejected: number };
   users: { totalCustomers: number };
-  disputes: { open: number; resolvedRefund: number; resolvedRelease: number };
+  disputes: { open: number; resolved: number };
   recentBookings: Array<{
     id: string;
     status: BookingStatus;

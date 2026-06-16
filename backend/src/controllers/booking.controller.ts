@@ -8,7 +8,7 @@ import { AuthenticatedRequest } from "../middleware/auth";
 
 const PLATFORM_FEE_PERCENT = Number(process.env.PLATFORM_FEE_PERCENT ?? "10");
 
-const TRANSITIONABLE_STATUSES = ["ACCEPTED", "COMPLETED", "CANCELLED"] as const;
+const TRANSITIONABLE_STATUSES = ["ACCEPTED", "AWAITING_CONFIRMATION", "CANCELLED"] as const;
 
 // Shared relation shape the frontend renders (customer/provider names +
 // category) — kept in one place so list and status-update responses match.
@@ -132,7 +132,7 @@ export async function updateBookingStatus(req: AuthenticatedRequest, res: Respon
     include: BOOKING_DISPLAY_INCLUDE,
   });
 
-  // Provider payout on completion
+  // Provider payout on completion (cash model: never triggers since payment.status is never PAID)
   if (status === "COMPLETED" && booking.payment?.status === "PAID") {
     const providerProfile = await prisma.providerProfile.findUnique({
       where: { id: booking.providerId },
@@ -197,9 +197,9 @@ export async function updateBookingStatus(req: AuthenticatedRequest, res: Respon
       title: "Booking accepted!",
       message: `${providerName} accepted your ${categoryName} booking. They're on the way!`,
     },
-    COMPLETED: {
-      title: "Booking completed",
-      message: `${providerName} marked your ${categoryName} booking as completed. How did it go? Leave a review!`,
+    AWAITING_CONFIRMATION: {
+      title: "Artisan marked job as done",
+      message: `${providerName} says the ${categoryName} job is complete. Please confirm in your bookings.`,
     },
     CANCELLED: {
       title: "Booking cancelled",
@@ -213,17 +213,65 @@ export async function updateBookingStatus(req: AuthenticatedRequest, res: Respon
       where: { id: booking.customerId },
       select: { email: true, fullName: true },
     });
-    if (customerUser) {
+    if (customerUser && (status === "ACCEPTED" || status === "CANCELLED")) {
       await sendBookingStatusEmail(
         customerUser,
         { fullName: providerName },
         categoryName,
-        status as "ACCEPTED" | "COMPLETED" | "CANCELLED",
+        status,
       );
     }
   }
 
   res.json(booking);
+}
+
+// POST /api/v1/bookings/:id/confirm-complete — Customer only
+// Customer confirms the job is done after the provider marks AWAITING_CONFIRMATION.
+// This sets status to COMPLETED and unlocks the review form.
+export async function confirmCompletion(req: AuthenticatedRequest, res: Response) {
+  const bookingId = String(req.params.id);
+  const customerId = req.user!.id;
+
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: BOOKING_DISPLAY_INCLUDE,
+  });
+
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (booking.customerId !== customerId) return res.status(403).json({ error: "Not your booking" });
+  if (booking.status !== "AWAITING_CONFIRMATION") {
+    return res.status(400).json({ error: "Booking is not awaiting confirmation" });
+  }
+
+  const updated = await prisma.booking.update({
+    where: { id: bookingId },
+    data: { status: "COMPLETED" },
+    include: BOOKING_DISPLAY_INCLUDE,
+  });
+
+  const categoryName = updated.category.name;
+  const providerName = updated.provider.user.fullName;
+
+  const [providerProfile, customerUser] = await Promise.all([
+    prisma.providerProfile.findUnique({ where: { id: booking.providerId }, select: { userId: true } }),
+    prisma.user.findUnique({ where: { id: customerId }, select: { email: true, fullName: true } }),
+  ]);
+
+  await Promise.all([
+    providerProfile
+      ? createNotification(
+          providerProfile.userId,
+          "Job confirmed complete!",
+          `Great work! The customer confirmed your ${categoryName} job is done.`,
+        )
+      : Promise.resolve(),
+    customerUser
+      ? sendBookingStatusEmail(customerUser, { fullName: providerName }, categoryName, "COMPLETED")
+      : Promise.resolve(),
+  ]);
+
+  res.json(updated);
 }
 
 // POST /api/v1/bookings/:id/review — Customer only

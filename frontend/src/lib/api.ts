@@ -142,6 +142,10 @@ export function updateBookingStatus(id: string, status: BookingStatus, apiToken:
   return apiPatch<Booking>(`/bookings/${id}/status`, { status }, apiToken);
 }
 
+export function confirmBookingComplete(id: string, apiToken: string) {
+  return apiPost<Booking>(`/bookings/${id}/confirm-complete`, {}, apiToken);
+}
+
 export function onboardProvider(
   input: {
     bio: string;
@@ -279,7 +283,7 @@ export function listAdminDisputes(apiToken: string) {
 
 export function resolveDispute(
   disputeId: string,
-  input: { outcome: "REFUND" | "RELEASE"; resolution: string },
+  input: { resolution: string },
   apiToken: string,
 ) {
   return apiPatch<AdminDispute>(`/admin/disputes/${disputeId}/resolve`, input, apiToken);

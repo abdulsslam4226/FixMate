@@ -6,15 +6,24 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { cancelBooking, raiseDispute, submitReview, updateBookingStatus } from "@/lib/api";
+import { cancelBooking, confirmBookingComplete, raiseDispute, submitReview, updateBookingStatus } from "@/lib/api";
 import type { Booking, BookingDispute, BookingReview, BookingStatus } from "@/lib/types";
 import type { Session } from "next-auth";
 
 const STATUS_VARIANT: Record<BookingStatus, string> = {
   PENDING: "outline",
   ACCEPTED: "secondary",
+  AWAITING_CONFIRMATION: "secondary",
   COMPLETED: "default",
   CANCELLED: "destructive",
+};
+
+const STATUS_LABEL: Record<BookingStatus, string> = {
+  PENDING: "Pending",
+  ACCEPTED: "Accepted",
+  AWAITING_CONFIRMATION: "Awaiting your confirmation",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
 };
 
 const formatDate = (iso: string) =>
@@ -181,6 +190,7 @@ export function BookingList({ bookings, session }: { bookings: Booking[]; sessio
   const [items, setItems] = useState(bookings);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [disputeOpenId, setDisputeOpenId] = useState<string | null>(null);
   const isProvider = session.user.role === "PROVIDER";
 
@@ -191,6 +201,18 @@ export function BookingList({ bookings, session }: { bookings: Booking[]; sessio
       setItems((prev) => prev.map((b) => (b.id === id ? updated : b)));
     } finally {
       setPendingId(null);
+    }
+  }
+
+  async function handleConfirmComplete(bookingId: string) {
+    setConfirmingId(bookingId);
+    try {
+      const updated = await confirmBookingComplete(bookingId, session.apiToken);
+      setItems((prev) => prev.map((b) => (b.id === bookingId ? updated : b)));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not confirm completion.");
+    } finally {
+      setConfirmingId(null);
     }
   }
 
@@ -248,7 +270,7 @@ export function BookingList({ bookings, session }: { bookings: Booking[]; sessio
               variant={STATUS_VARIANT[booking.status] as "default" | "secondary" | "outline" | "destructive"}
               className={booking.status === "COMPLETED" ? "gradient-violet border-0 text-primary-foreground" : undefined}
             >
-              {booking.status}
+              {STATUS_LABEL[booking.status]}
             </Badge>
           </CardHeader>
 
@@ -283,12 +305,39 @@ export function BookingList({ bookings, session }: { bookings: Booking[]; sessio
               <Button
                 size="sm"
                 disabled={pendingId === booking.id}
-                onClick={() => handleStatusChange(booking.id, "COMPLETED")}
+                onClick={() => handleStatusChange(booking.id, "AWAITING_CONFIRMATION")}
                 className="gradient-violet w-fit border-0 text-primary-foreground"
               >
                 <CheckCircle2 className="h-4 w-4" />
-                Mark as completed
+                {pendingId === booking.id ? "Updating…" : "Mark as done"}
               </Button>
+            )}
+
+            {isProvider && booking.status === "AWAITING_CONFIRMATION" && (
+              <p className="text-muted-foreground font-mono text-xs">
+                Waiting for the customer to confirm job completion…
+              </p>
+            )}
+
+            {/* Customer: confirm job completion */}
+            {!isProvider && booking.status === "AWAITING_CONFIRMATION" && (
+              <div className="flex flex-col gap-3 rounded-lg border border-orange-500/30 bg-orange-500/5 p-4">
+                <p className="font-mono text-xs uppercase tracking-wide text-orange-400">
+                  Your artisan says the job is done
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {booking.provider.user.fullName} has marked this job as complete. Please confirm if the work was done to your satisfaction.
+                </p>
+                <Button
+                  size="sm"
+                  disabled={confirmingId === booking.id}
+                  onClick={() => handleConfirmComplete(booking.id)}
+                  className="gradient-violet w-fit border-0 text-primary-foreground"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  {confirmingId === booking.id ? "Confirming…" : "Confirm job complete"}
+                </Button>
+              </div>
             )}
 
             {/* Customer: SLA hint + cancel */}
@@ -377,9 +426,7 @@ export function BookingList({ bookings, session }: { bookings: Booking[]; sessio
               <div className={`border rounded-lg p-3 flex flex-col gap-1 ${
                 booking.dispute.status === "OPEN"
                   ? "border-amber-500/30 bg-amber-500/5"
-                  : booking.dispute.status === "RESOLVED_REFUND"
-                  ? "border-emerald-500/30 bg-emerald-500/5"
-                  : "border-sky-500/30 bg-sky-500/5"
+                  : "border-emerald-500/30 bg-emerald-500/5"
               }`}>
                 <p className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
                   {booking.dispute.status === "OPEN" ? "Dispute under review" : "Dispute resolved"}

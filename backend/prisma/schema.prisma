@@ -25,6 +25,7 @@ enum VerifyStatus {
 enum BookingStatus {
   PENDING
   ACCEPTED
+  AWAITING_CONFIRMATION
   COMPLETED
   CANCELLED
 }
@@ -43,8 +44,7 @@ enum PaymentStatus {
 
 enum DisputeStatus {
   OPEN
-  RESOLVED_REFUND
-  RESOLVED_RELEASE
+  RESOLVED
 }
 
 model User {

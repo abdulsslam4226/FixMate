@@ -24,8 +24,17 @@ const fmt = (iso: string) => new Date(iso).toLocaleDateString("en-NG", { dateSty
 const BOOKING_STATUS_CLS: Record<BookingStatus, string> = {
   PENDING: "bg-amber-500/15 text-amber-400 border-amber-500/30",
   ACCEPTED: "bg-sky-500/15 text-sky-400 border-sky-500/30",
+  AWAITING_CONFIRMATION: "bg-orange-500/15 text-orange-400 border-orange-500/30",
   COMPLETED: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   CANCELLED: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+};
+
+const BOOKING_STATUS_LABEL: Record<BookingStatus, string> = {
+  PENDING: "Pending",
+  ACCEPTED: "Accepted",
+  AWAITING_CONFIRMATION: "Awaiting confirmation",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
 };
 
 function StatCard({
@@ -119,7 +128,7 @@ export default function AdminDashboardPage() {
                 icon={AlertTriangle}
                 label="Open disputes"
                 value={stats.disputes.open}
-                sub={`${stats.disputes.resolvedRefund + stats.disputes.resolvedRelease} resolved`}
+                sub={`${stats.disputes.resolved} resolved`}
               />
             </div>
           </section>
@@ -146,7 +155,7 @@ export default function AdminDashboardPage() {
                       <span className="text-muted-foreground font-mono text-xs">{fmt(b.bookingDate)}</span>
                     </div>
                     <span className={`border font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${BOOKING_STATUS_CLS[b.status]}`}>
-                      {b.status}
+                      {BOOKING_STATUS_LABEL[b.status]}
                     </span>
                   </div>
                 ))}

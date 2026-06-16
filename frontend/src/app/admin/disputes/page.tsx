@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,14 +12,11 @@ import type { AdminDispute, DisputeStatus } from "@/lib/types";
 
 const STATUS_CONFIG: Record<DisputeStatus, { label: string; cls: string }> = {
   OPEN: { label: "Open", cls: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
-  RESOLVED_REFUND: { label: "Refunded", cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
-  RESOLVED_RELEASE: { label: "Released", cls: "bg-sky-500/15 text-sky-400 border-sky-500/30" },
+  RESOLVED: { label: "Resolved", cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
 };
 
 const fmt = (iso: string) =>
   new Date(iso).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" });
-
-const naira = (kobo: number) => `₦${(kobo / 100).toLocaleString("en-NG")}`;
 
 function ResolvePanel({
   dispute,
@@ -32,53 +28,45 @@ function ResolvePanel({
   onResolved: (updated: AdminDispute) => void;
 }) {
   const [resolution, setResolution] = useState("");
-  const [busy, setBusy] = useState<"REFUND" | "RELEASE" | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handle(outcome: "REFUND" | "RELEASE") {
+  async function handle() {
     if (!resolution.trim()) { setError("Please add a resolution note."); return; }
-    setBusy(outcome);
+    setBusy(true);
     setError(null);
     try {
-      const updated = await resolveDispute(dispute.id, { outcome, resolution }, apiToken);
+      const updated = await resolveDispute(dispute.id, { resolution }, apiToken);
       onResolved(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not resolve dispute.");
-      setBusy(null);
+      setBusy(false);
     }
   }
 
   return (
     <div className="border-border/40 flex flex-col gap-3 rounded-lg border border-dashed p-4">
       <p className="font-mono text-xs uppercase tracking-wide text-muted-foreground">Resolve dispute</p>
+      <p className="text-muted-foreground text-xs">
+        FixMate is a cash-on-delivery platform — payments are handled directly between customer and artisan.
+        Record your mediation decision and notify both parties.
+      </p>
       <Textarea
         value={resolution}
         onChange={(e) => setResolution(e.target.value)}
-        placeholder="Add an internal note explaining your decision…"
-        rows={2}
+        placeholder="Describe the resolution and any guidance given to both parties…"
+        rows={3}
       />
       {error && <p className="text-destructive text-sm">{error}</p>}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          disabled={!!busy}
-          onClick={() => handle("REFUND")}
-          className="border-destructive/50 bg-destructive/10 text-destructive hover:bg-destructive/20"
-          variant="outline"
-        >
-          <XCircle className="h-4 w-4" />
-          {busy === "REFUND" ? "Processing…" : "Refund customer"}
-        </Button>
-        <Button
-          size="sm"
-          disabled={!!busy}
-          onClick={() => handle("RELEASE")}
-          className="gradient-violet border-0 text-primary-foreground"
-        >
-          <CheckCircle2 className="h-4 w-4" />
-          {busy === "RELEASE" ? "Processing…" : "Release to provider"}
-        </Button>
-      </div>
+      <Button
+        size="sm"
+        disabled={busy}
+        onClick={handle}
+        className="gradient-violet w-fit border-0 text-primary-foreground"
+      >
+        <CheckCircle2 className="h-4 w-4" />
+        {busy ? "Resolving…" : "Mark as resolved"}
+      </Button>
     </div>
   );
 }
@@ -93,7 +81,6 @@ function DisputeCard({
   onResolved: (updated: AdminDispute) => void;
 }) {
   const cfg = STATUS_CONFIG[dispute.status];
-  const payment = dispute.booking.payment;
 
   return (
     <Card className="border-border/60">
@@ -131,14 +118,6 @@ function DisputeCard({
         <div className="border-border/40 rounded-lg border p-3 text-sm">
           <p className="text-muted-foreground text-xs">Booking date: {fmt(dispute.booking.bookingDate)}</p>
           <p className="text-muted-foreground text-xs">Notes: {dispute.booking.notes}</p>
-          {payment && (
-            <p className="mt-1 text-xs">
-              Payment:{" "}
-              <span className="font-semibold">{naira(payment.amountKobo)}</span>
-              {" · "}
-              <span className="font-mono">{payment.status}</span>
-            </p>
-          )}
         </div>
 
         {/* Dispute reason */}

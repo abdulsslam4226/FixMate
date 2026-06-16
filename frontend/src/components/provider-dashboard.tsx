@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AlertTriangle, BadgeCheck, Briefcase, CheckCircle2, Clock, Star, TrendingUp, XCircle } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -28,8 +28,17 @@ const VERIFY_BADGE: Record<string, { label: string; cls: string }> = {
 const STATUS_BADGE: Record<BookingStatus, string> = {
   PENDING: "bg-amber-500/15 text-amber-400 border-amber-500/30",
   ACCEPTED: "bg-sky-500/15 text-sky-400 border-sky-500/30",
+  AWAITING_CONFIRMATION: "bg-orange-500/15 text-orange-400 border-orange-500/30",
   COMPLETED: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   CANCELLED: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+};
+
+const STATUS_LABEL: Record<BookingStatus, string> = {
+  PENDING: "Pending",
+  ACCEPTED: "Accepted",
+  AWAITING_CONFIRMATION: "Awaiting confirmation",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
 };
 
 const fmt = (iso: string) =>
@@ -104,7 +113,7 @@ function JobCard({
           )}
         </div>
         <span className={`border font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${STATUS_BADGE[booking.status]}`}>
-          {booking.status}
+          {STATUS_LABEL[booking.status]}
         </span>
       </div>
 
@@ -146,11 +155,17 @@ function JobCard({
         <Button
           size="sm"
           disabled={busy}
-          onClick={() => act("COMPLETED")}
+          onClick={() => act("AWAITING_CONFIRMATION")}
           className="gradient-violet w-fit border-0 text-primary-foreground"
         >
-          <CheckCircle2 className="h-4 w-4" /> Mark as completed
+          <CheckCircle2 className="h-4 w-4" /> {busy ? "Updating…" : "Mark as done"}
         </Button>
+      )}
+
+      {booking.status === "AWAITING_CONFIRMATION" && (
+        <p className="text-muted-foreground font-mono text-xs">
+          Waiting for customer to confirm…
+        </p>
       )}
     </div>
   );
@@ -436,7 +451,9 @@ export function ProviderDashboard({
   const verifyInfo = VERIFY_BADGE[profile.verificationStatus] ?? VERIFY_BADGE.PENDING;
 
   const pending = bookings.filter((b) => b.status === "PENDING");
-  const accepted = bookings.filter((b) => b.status === "ACCEPTED");
+  const accepted = bookings.filter(
+    (b) => b.status === "ACCEPTED" || b.status === "AWAITING_CONFIRMATION",
+  );
   const history = bookings.filter(
     (b) => b.status === "COMPLETED" || b.status === "CANCELLED",
   );

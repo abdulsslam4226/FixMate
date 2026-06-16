@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
-import { refundTransaction, initiateTransfer, createTransferRecipient } from "../lib/paystack";
 import { createNotification } from "../lib/notify";
 import { sendVerificationDecisionEmail } from "../lib/email";
 import { AuthenticatedRequest } from "../middleware/auth";
@@ -84,8 +83,7 @@ export async function getAdminStats(_req: Request, res: Response) {
     },
     disputes: {
       open: disputeMap["OPEN"] ?? 0,
-      resolvedRefund: (disputeMap["RESOLVED_REFUND"] ?? 0),
-      resolvedRelease: (disputeMap["RESOLVED_RELEASE"] ?? 0),
+      resolved: disputeMap["RESOLVED"] ?? 0,
     },
     recentBookings,
   });
@@ -187,16 +185,13 @@ export async function listDisputes(_req: Request, res: Response) {
 }
 
 // PATCH /api/v1/admin/disputes/:id/resolve — Admin
-// Resolves a dispute: REFUND triggers a Paystack refund to the customer;
-// RELEASE initiates a transfer to the provider (minus platform fee).
+// Marks a dispute as resolved with an admin note. FixMate is a cash-on-delivery
+// platform — no refunds or transfers are processed through the app.
 export async function resolveDispute(req: AuthenticatedRequest, res: Response) {
   const id = String(req.params.id);
   const adminId = req.user!.id;
-  const { outcome, resolution } = req.body;
+  const { resolution } = req.body;
 
-  if (outcome !== "REFUND" && outcome !== "RELEASE") {
-    return res.status(400).json({ error: "outcome must be REFUND or RELEASE" });
-  }
   if (!resolution || typeof resolution !== "string" || !resolution.trim()) {
     return res.status(400).json({ error: "resolution note is required" });
   }
@@ -206,9 +201,8 @@ export async function resolveDispute(req: AuthenticatedRequest, res: Response) {
     include: {
       booking: {
         include: {
-          payment: true,
-          provider: { include: { user: { select: { fullName: true } } } },
-          customer: { select: { id: true, fullName: true } },
+          provider: { select: { userId: true } },
+          customer: { select: { id: true } },
           category: { select: { name: true } },
         },
       },
@@ -218,68 +212,23 @@ export async function resolveDispute(req: AuthenticatedRequest, res: Response) {
   if (!dispute) return res.status(404).json({ error: "Dispute not found" });
   if (dispute.status !== "OPEN") return res.status(409).json({ error: "Dispute is already resolved" });
 
-  const newStatus = outcome === "REFUND" ? "RESOLVED_REFUND" : "RESOLVED_RELEASE";
-  const payment = dispute.booking.payment;
-
-  if (outcome === "REFUND" && payment?.status === "PAID") {
-    try {
-      await refundTransaction(payment.reference);
-      await prisma.payment.update({ where: { id: payment.id }, data: { status: "REFUNDED" } });
-    } catch (err) {
-      console.error("[paystack] Refund failed during dispute resolution", id, err);
-    }
-  }
-
-  if (outcome === "RELEASE" && payment?.status === "PAID" && !payment.transferCode) {
-    const provider = dispute.booking.provider;
-    if (provider.bankCode && provider.accountNumber) {
-      try {
-        let recipientCode = provider.recipientCode;
-        if (!recipientCode) {
-          recipientCode = await createTransferRecipient(
-            provider.user.fullName,
-            provider.bankCode,
-            provider.accountNumber,
-          );
-          if (recipientCode) {
-            await prisma.providerProfile.update({ where: { id: provider.id }, data: { recipientCode } });
-          }
-        }
-        if (recipientCode) {
-          const amountKobo = Math.round(payment.amountKobo * (1 - PLATFORM_FEE_PERCENT / 100));
-          const transferCode = await initiateTransfer(amountKobo, recipientCode, `FixMate dispute release — ${id}`);
-          if (transferCode) {
-            await prisma.payment.update({ where: { id: payment.id }, data: { transferCode } });
-          }
-        }
-      } catch (err) {
-        console.error("[paystack] Transfer failed during dispute resolution", id, err);
-      }
-    }
-  }
-
   const resolved = await prisma.dispute.update({
     where: { id },
-    data: { status: newStatus, resolution: resolution.trim(), resolvedById: adminId },
+    data: { status: "RESOLVED", resolution: resolution.trim(), resolvedById: adminId },
     include: DISPUTE_INCLUDE,
   });
 
-  const { booking } = dispute;
-  const categoryName = booking.category.name;
+  const categoryName = dispute.booking.category.name;
   await Promise.all([
     createNotification(
-      booking.customerId,
-      outcome === "REFUND" ? "Dispute resolved — refund issued" : "Dispute resolved",
-      outcome === "REFUND"
-        ? `Your dispute for the ${categoryName} booking has been resolved. A refund is on its way.`
-        : `Your dispute for the ${categoryName} booking has been reviewed. Payment was released to the provider.`,
+      dispute.booking.customerId,
+      "Dispute resolved",
+      `Your dispute for the ${categoryName} booking has been reviewed and resolved by our team.`,
     ),
     createNotification(
-      booking.provider.userId,
-      outcome === "RELEASE" ? "Dispute resolved — payment released" : "Dispute resolved",
-      outcome === "RELEASE"
-        ? `A dispute on your ${categoryName} booking was resolved in your favour. Payment will be transferred shortly.`
-        : `A dispute on your ${categoryName} booking has been resolved. The customer has been refunded.`,
+      dispute.booking.provider.userId,
+      "Dispute resolved",
+      `A dispute on your ${categoryName} booking has been reviewed and resolved by our team.`,
     ),
   ]);
 
