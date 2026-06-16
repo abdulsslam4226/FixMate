@@ -314,6 +314,17 @@ export async function removeBlockout(req: AuthenticatedRequest, res: Response) {
   res.json({ ok: true });
 }
 
+// GET /api/v1/providers — Public
+// Returns minimal ID list of all verified providers — used by the frontend sitemap generator.
+export async function getAllVerifiedProviders(_req: AuthenticatedRequest, res: Response) {
+  const providers = await prisma.providerProfile.findMany({
+    where: { verificationStatus: "VERIFIED" },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+  });
+  res.json(providers);
+}
+
 // GET /api/v1/providers/:id — Public
 // Returns a single provider's full public profile (for the customer-facing
 // provider page). Only VERIFIED providers are visible to the public.

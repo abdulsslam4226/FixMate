@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { onboard, getProvider, getDashboard, updateProviderProfile, addPortfolioImage, deletePortfolioImage, updateAvailability, addBlockout, removeBlockout } from "../controllers/provider.controller";
+import { onboard, getProvider, getDashboard, updateProviderProfile, addPortfolioImage, deletePortfolioImage, updateAvailability, addBlockout, removeBlockout, getAllVerifiedProviders } from "../controllers/provider.controller";
 import { requireRole } from "../middleware/auth";
 
 const router = Router();
 
+router.get("/", getAllVerifiedProviders);
 router.post("/onboard", requireRole("PROVIDER", "CUSTOMER"), onboard);
 // /dashboard and /profile must come before /:id to avoid being matched as id params
 router.get("/dashboard", requireRole("PROVIDER"), getDashboard);

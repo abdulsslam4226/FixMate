@@ -1,14 +1,29 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { ProviderList } from "@/components/provider-list";
 import { getCategories, getProvidersByCategory } from "@/lib/api";
 
-// Verified category artisans within geographic bounds — Module 3.3 routing map.
-export default async function CategoryProvidersPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export const revalidate = 3600;
+
+type Props = { params: Promise<{ id: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const categories = await getCategories().catch(() => []);
+  const cat = categories.find((c) => c.id === id);
+  if (!cat) return { title: "Service providers" };
+  return {
+    title: `${cat.name} in Nigeria — Verified artisans`,
+    description: `${cat.description} Browse and book verified ${cat.name.toLowerCase()} artisans near you on FixMate. Pay cash when the job is done.`,
+    openGraph: {
+      title: `${cat.name} | FixMate`,
+      description: cat.description,
+    },
+  };
+}
+
+export default async function CategoryProvidersPage({ params }: Props) {
   const { id } = await params;
   const [categories, providers] = await Promise.all([getCategories(), getProvidersByCategory(id)]);
   const category = categories.find((c) => c.id === id);

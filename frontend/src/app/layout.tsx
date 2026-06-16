@@ -22,8 +22,20 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FixMate — Find trusted local artisans",
-  description: "FixMate connects you with verified local plumbers, electricians, AC technicians and carpenters.",
+  title: {
+    default: "FixMate — Find trusted local artisans in Nigeria",
+    template: "%s | FixMate",
+  },
+  description:
+    "Book verified plumbers, electricians, AC technicians, carpenters and more across Nigeria. Pay cash when the job is done. Same-day service available.",
+  keywords: ["artisan", "plumber", "electrician", "carpenter", "AC technician", "Nigeria", "Lagos", "Abuja", "home service", "FixMate"],
+  openGraph: {
+    siteName: "FixMate",
+    type: "website",
+    locale: "en_NG",
+  },
+  twitter: { card: "summary_large_image" },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({

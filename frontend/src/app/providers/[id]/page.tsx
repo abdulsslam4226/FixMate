@@ -1,3 +1,5 @@
+import { cache } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BadgeCheck, MapPin, Phone, Star, Tag } from "lucide-react";
@@ -5,7 +7,42 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { getProvider } from "@/lib/api";
+import { getProvider as _getProvider } from "@/lib/api";
+
+// Deduplicate within a single request so generateMetadata and the page
+// component share one fetch rather than making two backend calls.
+const getProvider = cache(_getProvider);
+
+export const revalidate = 3600; // rebuild provider pages hourly in the background
+
+type Props = { params: Promise<{ id: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  try {
+    const provider = await getProvider(id);
+    const name = provider.user.fullName;
+    const category = provider.category.name;
+    const bio = provider.bio.slice(0, 150) + (provider.bio.length > 150 ? "…" : "");
+    return {
+      title: `${name} — ${category}`,
+      description: `${bio} Verified artisan on FixMate. Pay cash when the job is done.`,
+      openGraph: {
+        title: `${name} — ${category} | FixMate`,
+        description: bio,
+        ...(provider.selfieUrl ? { images: [{ url: provider.selfieUrl, alt: name }] } : {}),
+        type: "profile",
+      },
+      twitter: {
+        card: "summary",
+        title: `${name} — ${category} | FixMate`,
+        description: bio,
+      },
+    };
+  } catch {
+    return { title: "Artisan profile" };
+  }
+}
 
 function StarRow({ rating }: { rating: number }) {
   return (
@@ -20,7 +57,7 @@ function StarRow({ rating }: { rating: number }) {
   );
 }
 
-export default async function ProviderProfilePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProviderProfilePage({ params }: Props) {
   const { id } = await params;
 
   let provider;
@@ -30,8 +67,43 @@ export default async function ProviderProfilePage({ params }: { params: Promise<
     notFound();
   }
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    name: provider.category.name,
+    description: provider.bio,
+    provider: {
+      "@type": "Person",
+      name: provider.user.fullName,
+      ...(provider.user.phoneNumber ? { telephone: provider.user.phoneNumber } : {}),
+      ...(provider.selfieUrl ? { image: provider.selfieUrl } : {}),
+    },
+    areaServed: { "@type": "Country", name: "Nigeria" },
+    offers: {
+      "@type": "Offer",
+      priceCurrency: "NGN",
+      price: (provider.pricePerJobKobo / 100).toFixed(0),
+      description: "Cash payment upon job completion",
+    },
+    ...(provider.averageRating != null
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: provider.averageRating,
+            reviewCount: provider.reviewCount,
+            bestRating: 5,
+            worstRating: 1,
+          },
+        }
+      : {}),
+  };
+
   return (
     <main className="industrial-texture mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
 
       {/* Header */}
       <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-8">
