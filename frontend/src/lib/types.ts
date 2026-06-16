@@ -117,6 +117,7 @@ export interface DashboardProfile {
   id: string;
   bio: string;
   verificationStatus: VerifyStatus;
+  rejectionReason: string | null;
   pricePerJobKobo: number;
   operatingRadiusKm: number;
   bankCode: string | null;

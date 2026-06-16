@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { refundTransaction, initiateTransfer, createTransferRecipient } from "../lib/paystack";
 import { createNotification } from "../lib/notify";
+import { sendVerificationDecisionEmail } from "../lib/email";
 import { AuthenticatedRequest } from "../middleware/auth";
 
 const PLATFORM_FEE_PERCENT = Number(process.env.PLATFORM_FEE_PERCENT ?? "10");
@@ -119,9 +120,10 @@ export async function getProviderDetail(req: Request, res: Response) {
 
 // PATCH /api/v1/admin/providers/:id/verify — Admin
 // Sets verificationStatus (PENDING / VERIFIED / REJECTED) (Module 3.2-A).
+// Notifies the provider by in-app notification and email on every decision.
 export async function setVerificationStatus(req: Request, res: Response) {
   const id = String(req.params.id);
-  const { verificationStatus } = req.body;
+  const { verificationStatus, rejectionReason } = req.body;
 
   if (!VERIFY_STATUSES.includes(verificationStatus)) {
     return res.status(400).json({ error: `verificationStatus must be one of ${VERIFY_STATUSES.join(", ")}` });
@@ -129,9 +131,30 @@ export async function setVerificationStatus(req: Request, res: Response) {
 
   const profile = await prisma.providerProfile.update({
     where: { id },
-    data: { verificationStatus },
+    data: {
+      verificationStatus,
+      // Clear the reason on approval; store it on rejection
+      rejectionReason: verificationStatus === "REJECTED"
+        ? (typeof rejectionReason === "string" && rejectionReason.trim() ? rejectionReason.trim() : null)
+        : null,
+    },
     include: ADMIN_INCLUDE,
   });
+
+  if (verificationStatus === "VERIFIED" || verificationStatus === "REJECTED") {
+    const { id: userId, fullName, email } = profile.user;
+    const notifTitle = verificationStatus === "VERIFIED"
+      ? "You're verified on FixMate!"
+      : "Verification update";
+    const notifBody = verificationStatus === "VERIFIED"
+      ? "Your profile is now live. You'll start receiving booking requests from customers near you."
+      : "We couldn't verify your profile at this time. Contact support if you'd like to resubmit.";
+
+    await Promise.all([
+      createNotification(userId, notifTitle, notifBody),
+      sendVerificationDecisionEmail({ email, fullName }, verificationStatus, profile.rejectionReason ?? undefined),
+    ]);
+  }
 
   res.json(profile);
 }

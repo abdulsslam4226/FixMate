@@ -126,3 +126,32 @@ export function sendProviderBookingCancelledEmail(
     html: `<p>Hi ${provider.fullName},</p><p>A customer cancelled their <strong>${categoryName}</strong> booking.</p><p><a href="${link}">View your dashboard →</a></p>`,
   });
 }
+
+export function sendVerificationDecisionEmail(
+  provider: { email: string; fullName: string },
+  decision: "VERIFIED" | "REJECTED",
+  rejectionReason?: string,
+) {
+  const dashboardLink = frontendUrl("/dashboard");
+  const resubmitLink = frontendUrl("/become-a-provider");
+  if (decision === "VERIFIED") {
+    return sendEmail({
+      to: provider.email,
+      subject: "You're verified on FixMate!",
+      text: `Hi ${provider.fullName},\n\nGreat news — your FixMate profile has been verified. You'll now appear in search results and start receiving booking requests.\n\nView your dashboard:\n${dashboardLink}\n\nFixMate — Trusted home services`,
+      html: `<p>Hi ${provider.fullName},</p><p>Great news — your FixMate profile has been <strong>verified</strong>. You'll now appear in search results and start receiving booking requests.</p><p><a href="${dashboardLink}">View your dashboard →</a></p><p style="color:#888;font-size:12px">FixMate — Trusted home services</p>`,
+    });
+  }
+  const reasonBlock = rejectionReason
+    ? `\n\nReason: ${rejectionReason}`
+    : "";
+  const reasonHtml = rejectionReason
+    ? `<p><strong>Reason:</strong> ${rejectionReason}</p>`
+    : "";
+  return sendEmail({
+    to: provider.email,
+    subject: "Update on your FixMate verification",
+    text: `Hi ${provider.fullName},\n\nAfter reviewing your submission, we were unable to verify your profile at this time.${reasonBlock}\n\nYou can update your documents and resubmit:\n${resubmitLink}\n\nFixMate — Trusted home services`,
+    html: `<p>Hi ${provider.fullName},</p><p>After reviewing your submission, we were unable to verify your profile at this time.</p>${reasonHtml}<p><a href="${resubmitLink}">Update and resubmit →</a></p><p style="color:#888;font-size:12px">FixMate — Trusted home services</p>`,
+  });
+}

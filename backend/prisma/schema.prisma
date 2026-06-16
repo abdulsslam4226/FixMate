@@ -88,6 +88,7 @@ model ProviderProfile {
   categoryId         String
   category           ServiceCategory  @relation(fields: [categoryId], references: [id])
   verificationStatus VerifyStatus     @default(PENDING)
+  rejectionReason    String?          @db.Text
 
   // Localized Verification Data (Phase 1 Local Trust Layer)
   idNumber           String           // Stores NIN or BVN securely

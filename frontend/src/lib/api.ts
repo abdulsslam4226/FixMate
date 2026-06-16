@@ -259,6 +259,15 @@ export function getVerificationQueue(apiToken: string) {
   return apiGetAuthed<VerificationQueueItem[]>("/admin/verification-queue", apiToken);
 }
 
-export function setProviderVerification(id: string, verificationStatus: VerifyStatus, apiToken: string) {
-  return apiPatch<VerificationQueueItem>(`/admin/providers/${id}/verify`, { verificationStatus }, apiToken);
+export function setProviderVerification(
+  id: string,
+  verificationStatus: VerifyStatus,
+  apiToken: string,
+  rejectionReason?: string,
+) {
+  return apiPatch<VerificationQueueItem>(
+    `/admin/providers/${id}/verify`,
+    { verificationStatus, ...(rejectionReason ? { rejectionReason } : {}) },
+    apiToken,
+  );
 }

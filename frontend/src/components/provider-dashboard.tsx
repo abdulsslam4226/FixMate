@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { BadgeCheck, Briefcase, CheckCircle2, Clock, Star, TrendingUp, XCircle } from "lucide-react";
+import { AlertTriangle, BadgeCheck, Briefcase, CheckCircle2, Clock, Star, TrendingUp, XCircle } from "lucide-react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -330,6 +331,34 @@ export function ProviderDashboard({
 
   return (
     <div className="flex flex-col gap-8">
+      {/* Rejection banner */}
+      {profile.verificationStatus === "REJECTED" && (
+        <div className="flex flex-col gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+          <span className="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-destructive">
+            <AlertTriangle className="h-4 w-4" />
+            Application not approved
+          </span>
+          {profile.rejectionReason ? (
+            <p className="text-muted-foreground text-sm">
+              <span className="text-foreground font-medium">Reason: </span>{profile.rejectionReason}
+            </p>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              We couldn&apos;t verify your profile with the documents submitted.
+            </p>
+          )}
+          <p className="text-muted-foreground text-sm">
+            Update your details and resubmit — our team will review it again.
+          </p>
+          <Link
+            href="/become-a-provider"
+            className="text-destructive hover:text-destructive/80 w-fit font-mono text-xs underline underline-offset-2 transition-colors"
+          >
+            Resubmit your application →
+          </Link>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">

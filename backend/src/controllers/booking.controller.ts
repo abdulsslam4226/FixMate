@@ -107,15 +107,24 @@ export async function createBooking(req: AuthenticatedRequest, res: Response) {
   res.status(201).json(booking);
 }
 
-// PATCH /api/v1/bookings/:id/status — Private
+// PATCH /api/v1/bookings/:id/status — Provider only
 // Toggles dynamic tracking states (ACCEPTED/COMPLETED/CANCELLED) (Module 3.3)
 export async function updateBookingStatus(req: AuthenticatedRequest, res: Response) {
   const id = String(req.params.id);
   const { status } = req.body;
+  const { id: userId } = req.user!;
 
   if (!TRANSITIONABLE_STATUSES.includes(status)) {
     return res.status(400).json({ error: `status must be one of ${TRANSITIONABLE_STATUSES.join(", ")}` });
   }
+
+  const existing = await prisma.booking.findUnique({
+    where: { id },
+    include: { provider: { select: { userId: true } } },
+  });
+
+  if (!existing) return res.status(404).json({ error: "Booking not found" });
+  if (existing.provider.userId !== userId) return res.status(403).json({ error: "Not your booking" });
 
   const booking = await prisma.booking.update({
     where: { id },

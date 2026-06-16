@@ -134,12 +134,36 @@ export async function handleWebhook(req: Request, res: Response) {
 
   if (event.event === "charge.success") {
     const reference = String(event.data.reference ?? "");
-    const payment = await prisma.payment.findUnique({ where: { reference } });
+    const payment = await prisma.payment.findUnique({
+      where: { reference },
+      include: {
+        booking: {
+          include: {
+            category: { select: { name: true } },
+            provider: { select: { userId: true, user: { select: { fullName: true } } } },
+          },
+        },
+      },
+    });
     if (payment && payment.status !== "PAID") {
       await prisma.payment.update({
         where: { reference },
         data: { status: "PAID", paidAt: new Date() },
       });
+      const { booking } = payment;
+      const amountNaira = (payment.amountKobo / 100).toLocaleString("en-NG");
+      await Promise.all([
+        createNotification(
+          booking.customerId,
+          "Payment confirmed",
+          `Your payment of ₦${amountNaira} for the ${booking.category.name} booking has been received.`,
+        ),
+        createNotification(
+          booking.provider.userId,
+          "Payment received",
+          `${booking.category.name} booking payment of ₦${amountNaira} has been confirmed.`,
+        ),
+      ]);
     }
   }
 }

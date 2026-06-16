@@ -181,6 +181,7 @@ export function BookingList({ bookings, session }: { bookings: Booking[]; sessio
   const [items, setItems] = useState(bookings);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [disputeOpenId, setDisputeOpenId] = useState<string | null>(null);
   const isProvider = session.user.role === "PROVIDER";
 
   async function handleStatusChange(id: string, status: BookingStatus) {
@@ -332,23 +333,43 @@ export function BookingList({ bookings, session }: { bookings: Booking[]; sessio
               </div>
             )}
 
-            {/* Customer: leave a review */}
+            {/* Customer: leave a review or raise a dispute — toggled, not stacked */}
             {!isProvider && booking.status === "COMPLETED" && !booking.review && !booking.dispute && (
-              <ReviewForm
-                bookingId={booking.id}
-                providerName={booking.provider.user.fullName}
-                apiToken={session.apiToken}
-                onSubmitted={(review) => handleReviewSubmitted(booking.id, review)}
-              />
-            )}
-
-            {/* Customer: open dispute (only if no review and no existing dispute) */}
-            {!isProvider && booking.status === "COMPLETED" && !booking.dispute && !booking.review && (
-              <DisputeForm
-                bookingId={booking.id}
-                apiToken={session.apiToken}
-                onSubmitted={(dispute) => handleDisputeSubmitted(booking.id, dispute)}
-              />
+              disputeOpenId === booking.id ? (
+                <div className="flex flex-col gap-2">
+                  <DisputeForm
+                    bookingId={booking.id}
+                    apiToken={session.apiToken}
+                    onSubmitted={(dispute) => {
+                      handleDisputeSubmitted(booking.id, dispute);
+                      setDisputeOpenId(null);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setDisputeOpenId(null)}
+                    className="text-muted-foreground hover:text-foreground w-fit font-mono text-xs underline underline-offset-2 transition-colors"
+                  >
+                    ← Back to review
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <ReviewForm
+                    bookingId={booking.id}
+                    providerName={booking.provider.user.fullName}
+                    apiToken={session.apiToken}
+                    onSubmitted={(review) => handleReviewSubmitted(booking.id, review)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setDisputeOpenId(booking.id)}
+                    className="text-muted-foreground hover:text-destructive w-fit font-mono text-xs underline underline-offset-2 transition-colors"
+                  >
+                    Something went wrong? Raise a dispute instead
+                  </button>
+                </div>
+              )
             )}
 
             {/* Customer: existing dispute status */}

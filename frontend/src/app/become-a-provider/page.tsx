@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { getCategories, onboardProvider, uploadSelfie } from "@/lib/api";
-import type { IdType, ServiceCategory } from "@/lib/types";
+import { getCategories, getProviderDashboard, onboardProvider, uploadSelfie } from "@/lib/api";
+import type { IdType, ServiceCategory, VerifyStatus } from "@/lib/types";
 
 // Provider onboarding — Module 3.2-A Localized Trust Engine.
 // Captures NIN/BVN (with idType declaration), uploads the verification selfie
@@ -35,11 +35,23 @@ export default function BecomeAProviderPage() {
   const [geoStatus, setGeoStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "success">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [providerStatus, setProviderStatus] = useState<VerifyStatus | "loading" | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getCategories().then(setCategories).catch(() => setCategories([]));
   }, []);
+
+  // When already a provider, fetch verification status to differentiate
+  // REJECTED (can resubmit) from PENDING/VERIFIED (blocked)
+  useEffect(() => {
+    if (session?.user.role === "PROVIDER") {
+      setProviderStatus("loading");
+      getProviderDashboard(session.apiToken)
+        .then((data) => setProviderStatus(data.profile.verificationStatus))
+        .catch(() => setProviderStatus("PENDING"));
+    }
+  }, [session]);
 
   function handleSelfieChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
@@ -125,18 +137,65 @@ export default function BecomeAProviderPage() {
     );
   }
 
+  if (session.user.role === "PROVIDER") {
+    if (providerStatus === "loading" || providerStatus === null) {
+      return (
+        <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-6 py-16">
+          <div className="bg-card/40 h-32 animate-pulse rounded-xl" />
+        </main>
+      );
+    }
+
+    if (providerStatus === "PENDING") {
+      return (
+        <main className="industrial-texture mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-4 px-6 py-16 text-center">
+          <h1 className="font-heading text-headline-lg-mobile font-bold">Application under review</h1>
+          <p className="text-muted-foreground text-body-md">
+            Your verification details have been submitted. Our team is reviewing your NIN/BVN and guarantor —
+            we&apos;ll notify you by email once a decision is made.
+          </p>
+          <Button
+            nativeButton={false}
+            render={<Link href="/dashboard">Go to my dashboard</Link>}
+            className="gradient-violet mx-auto w-fit border-0 text-primary-foreground"
+          />
+        </main>
+      );
+    }
+
+    if (providerStatus === "VERIFIED") {
+      return (
+        <main className="industrial-texture mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-4 px-6 py-16 text-center">
+          <h1 className="font-heading text-headline-lg-mobile font-bold">You&apos;re already verified</h1>
+          <p className="text-muted-foreground text-body-md">
+            Your FixMate profile is live and you&apos;re receiving booking requests.
+          </p>
+          <Button
+            nativeButton={false}
+            render={<Link href="/dashboard">Go to my dashboard</Link>}
+            className="gradient-violet mx-auto w-fit border-0 text-primary-foreground"
+          />
+        </main>
+      );
+    }
+
+    // REJECTED — fall through to the form below with a banner
+  }
+
   if (status === "success") {
     return (
       <main className="industrial-texture mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-4 px-6 py-16 text-center">
-        <h1 className="font-heading text-headline-lg-mobile font-bold">Verification details submitted!</h1>
+        <h1 className="font-heading text-headline-lg-mobile font-bold">
+          {providerStatus === "REJECTED" ? "Application resubmitted!" : "Verification details submitted!"}
+        </h1>
         <p className="text-muted-foreground text-body-md">
-          Our admin team reviews every NIN/BVN, selfie and guarantor before a profile goes live with the
-          violet verified badge. Your guarantor has been sent a WhatsApp confirmation message. We&apos;ll
-          notify you once you&apos;re approved.
+          {providerStatus === "REJECTED"
+            ? "Your updated details are with our admin team. We'll notify you by email once a decision is made."
+            : "Our admin team reviews every NIN/BVN, selfie and guarantor before a profile goes live with the violet verified badge. We'll notify you once you're approved."}
         </p>
         <Button
           nativeButton={false}
-          render={<Link href="/bookings">View my job requests</Link>}
+          render={<Link href="/dashboard">View my dashboard</Link>}
           className="gradient-violet mx-auto w-fit border-0 text-primary-foreground"
         />
       </main>
@@ -147,12 +206,24 @@ export default function BecomeAProviderPage() {
     <main className="industrial-texture mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-6 py-16">
       <div className="flex flex-col gap-2">
         <span className="text-muted-foreground font-mono text-label-sm uppercase tracking-[0.2em]">For artisans</span>
-        <h1 className="font-heading text-headline-lg-mobile font-bold">Get listed as a verified FixMate artisan</h1>
+        <h1 className="font-heading text-headline-lg-mobile font-bold">
+          {providerStatus === "REJECTED" ? "Resubmit your application" : "Get listed as a verified FixMate artisan"}
+        </h1>
         <p className="text-muted-foreground text-body-md">
-          FixMate&apos;s Localized Trust Engine checks every provider&apos;s identity and a physical guarantor
-          before they appear in search — that&apos;s what earns the violet verified badge customers trust.
+          {providerStatus === "REJECTED"
+            ? "Update your details below and resubmit. Our admin team will review the new information and get back to you."
+            : "FixMate checks every provider’s identity and a physical guarantor before they appear in search — that’s what earns the violet verified badge customers trust."}
         </p>
       </div>
+
+      {providerStatus === "REJECTED" && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <p className="text-destructive font-mono text-xs uppercase tracking-widest">Previous application rejected</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Correct any issues below — make sure your selfie is clear and your NIN/BVN matches your legal name.
+          </p>
+        </div>
+      )}
 
       <Card className="border-border/60">
         <CardHeader>
@@ -257,7 +328,7 @@ export default function BecomeAProviderPage() {
             {/* Guarantor */}
             <div className="border-border/60 flex flex-col gap-4 rounded-lg border border-dashed p-4">
               <p className="text-muted-foreground font-mono text-label-sm uppercase tracking-[0.15em]">
-                Physical guarantor — Module 3.2-A trust check
+                Guarantor details
               </p>
               <p className="text-muted-foreground text-xs">
                 Your guarantor will receive a WhatsApp message asking them to confirm they vouch for you.

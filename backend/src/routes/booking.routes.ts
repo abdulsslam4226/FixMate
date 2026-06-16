@@ -6,7 +6,7 @@ const router = Router();
 
 router.get("/mine", requireAuth, getMyBookings);
 router.post("/", requireRole("CUSTOMER"), createBooking);
-router.patch("/:id/status", requireAuth, updateBookingStatus);
+router.patch("/:id/status", requireRole("PROVIDER"), updateBookingStatus);
 router.post("/:id/review", requireRole("CUSTOMER"), submitReview);
 router.post("/:id/cancel", requireRole("CUSTOMER"), cancelBooking);
 router.post("/:id/dispute", requireRole("CUSTOMER"), raiseDispute);

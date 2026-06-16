@@ -50,9 +50,9 @@ export async function onboard(req: AuthenticatedRequest, res: Response) {
     return res.status(400).json({ error: "idType must be NIN or BVN" });
   }
 
-  // Check existing profile
+  // REJECTED providers may resubmit; any other existing profile is a conflict
   const existing = await prisma.providerProfile.findUnique({ where: { userId } });
-  if (existing) {
+  if (existing && existing.verificationStatus !== "REJECTED") {
     return res.status(409).json({ error: "A provider profile already exists for this account" });
   }
 
@@ -62,26 +62,36 @@ export async function onboard(req: AuthenticatedRequest, res: Response) {
     return res.status(400).json({ error: identityResult.message });
   }
 
-  const profile = await prisma.providerProfile.create({
-    data: {
-      userId,
-      bio,
-      categoryId,
-      idNumber,
-      selfieUrl,
-      guarantorName,
-      guarantorPhone,
-      latitude,
-      longitude,
-      operatingRadiusKm: operatingRadiusKm ?? undefined,
-      pricePerJobKobo: pricePerJobKobo ? Number(pricePerJobKobo) : undefined,
-      bankCode: bankCode || undefined,
-      accountNumber: accountNumber || undefined,
-    },
-    include: PROVIDER_INCLUDE,
-  });
+  const profileData = {
+    bio,
+    categoryId,
+    idNumber,
+    selfieUrl,
+    guarantorName,
+    guarantorPhone,
+    latitude,
+    longitude,
+    operatingRadiusKm: operatingRadiusKm ?? undefined,
+    pricePerJobKobo: pricePerJobKobo ? Number(pricePerJobKobo) : undefined,
+    bankCode: bankCode || undefined,
+    accountNumber: accountNumber || undefined,
+  };
 
-  await prisma.user.update({ where: { id: userId }, data: { role: "PROVIDER" } });
+  let profile;
+  if (existing) {
+    // Resubmission — reset to PENDING so admin reviews the updated documents
+    profile = await prisma.providerProfile.update({
+      where: { userId },
+      data: { ...profileData, verificationStatus: "PENDING" },
+      include: PROVIDER_INCLUDE,
+    });
+  } else {
+    profile = await prisma.providerProfile.create({
+      data: { userId, ...profileData },
+      include: PROVIDER_INCLUDE,
+    });
+    await prisma.user.update({ where: { id: userId }, data: { role: "PROVIDER" } });
+  }
 
   // Fire guarantor WhatsApp ping — graceful no-op if n8n not configured
   await triggerGuarantorPingWebhook({
@@ -91,7 +101,7 @@ export async function onboard(req: AuthenticatedRequest, res: Response) {
     guarantorPhone,
   });
 
-  res.status(201).json({
+  res.status(existing ? 200 : 201).json({
     profile,
     identityCheck: identityResult,
   });

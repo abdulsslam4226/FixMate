@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BadgeCheck, Calendar, MapPin, Phone, ShieldCheck, User, XCircle } from "lucide-react";
+import { BadgeCheck, Calendar, CheckCircle2, MapPin, Phone, ShieldCheck, User, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,21 +9,34 @@ import { setProviderVerification } from "@/lib/api";
 import type { VerificationQueueItem } from "@/lib/types";
 import type { Session } from "next-auth";
 
-// Admin workspace for the Localized Trust Engine — renders each provider's
-// selfie photo, NIN/BVN, guarantor, and location so the admin can make a
-// real trust decision, then approve or reject (Module 3.2-A).
 export function VerificationQueue({ queue, session }: { queue: VerificationQueueItem[]; session: Session }) {
   const [items, setItems] = useState(queue);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [decided, setDecided] = useState<Record<string, "VERIFIED" | "REJECTED">>({});
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
-  async function handleDecision(id: string, verificationStatus: "VERIFIED" | "REJECTED") {
+  async function handleDecision(id: string, verificationStatus: "VERIFIED" | "REJECTED", reason?: string) {
     setPendingId(id);
     try {
-      await setProviderVerification(id, verificationStatus, session.apiToken);
-      setItems((prev) => prev.filter((item) => item.id !== id));
+      await setProviderVerification(id, verificationStatus, session.apiToken, reason);
+      setDecided((prev) => ({ ...prev, [id]: verificationStatus }));
+      setRejectingId(null);
+      setRejectReason("");
+      setTimeout(() => setItems((prev) => prev.filter((item) => item.id !== id)), 1800);
     } finally {
       setPendingId(null);
     }
+  }
+
+  function startReject(id: string) {
+    setRejectingId(id);
+    setRejectReason("");
+  }
+
+  function cancelReject() {
+    setRejectingId(null);
+    setRejectReason("");
   }
 
   if (items.length === 0) {
@@ -130,25 +143,62 @@ export function VerificationQueue({ queue, session }: { queue: VerificationQueue
             </div>
 
             {/* Actions */}
-            <div className="border-border/40 flex flex-wrap gap-2 border-t pt-4">
-              <Button
-                size="sm"
-                disabled={pendingId === item.id}
-                onClick={() => handleDecision(item.id, "VERIFIED")}
-                className="gradient-violet border-0 text-primary-foreground"
-              >
-                <BadgeCheck className="h-4 w-4" />
-                Approve &amp; verify
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={pendingId === item.id}
-                onClick={() => handleDecision(item.id, "REJECTED")}
-              >
-                <XCircle className="h-4 w-4" />
-                Reject
-              </Button>
+            <div className="border-border/40 flex flex-col gap-3 border-t pt-4">
+              {decided[item.id] ? (
+                <span className={`flex items-center gap-1.5 font-mono text-xs ${decided[item.id] === "VERIFIED" ? "text-emerald-400" : "text-zinc-400"}`}>
+                  <CheckCircle2 className="h-4 w-4" />
+                  {decided[item.id] === "VERIFIED" ? "Approved — provider notified" : "Rejected — provider notified"}
+                </span>
+              ) : rejectingId === item.id ? (
+                <div className="flex flex-col gap-2">
+                  <label className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+                    Reason for rejection <span className="normal-case tracking-normal opacity-60">(optional — shown to provider)</span>
+                  </label>
+                  <textarea
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="e.g. Selfie photo is blurry and does not match the submitted ID."
+                    rows={2}
+                    className="border-input bg-input/30 focus-visible:ring-ring/50 focus-visible:border-ring w-full rounded-lg border px-3 py-2 text-sm outline-none focus-visible:ring-2"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={pendingId === item.id}
+                      onClick={() => handleDecision(item.id, "REJECTED", rejectReason || undefined)}
+                      className="border-destructive/50 text-destructive hover:bg-destructive/10 w-fit"
+                      variant="outline"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      {pendingId === item.id ? "Rejecting…" : "Confirm rejection"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={cancelReject} className="text-muted-foreground">
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    disabled={pendingId === item.id}
+                    onClick={() => handleDecision(item.id, "VERIFIED")}
+                    className="gradient-violet border-0 text-primary-foreground"
+                  >
+                    <BadgeCheck className="h-4 w-4" />
+                    Approve &amp; verify
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={pendingId === item.id}
+                    onClick={() => startReject(item.id)}
+                  >
+                    <XCircle className="h-4 w-4" />
+                    Reject
+                  </Button>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

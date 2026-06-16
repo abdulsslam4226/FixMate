@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { BadgeCheck, MapPin, Search, Star, X } from "lucide-react";
+import { BadgeCheck, Locate, MapPin, Search, Star, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,16 +49,19 @@ export function ProviderList({
   const [minRating, setMinRating] = useState(0);
   const [sortBy, setSortBy] = useState("rating_desc");
   const [loading, setLoading] = useState(false);
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoStatus, setGeoStatus] = useState<"idle" | "loading" | "active" | "denied">("idle");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetch = useCallback(
-    async (query: string, rating: number, sort: string) => {
+    async (query: string, rating: number, sort: string, coords: { lat: number; lng: number } | null) => {
       setLoading(true);
       try {
         const results = await getProvidersByCategory(categoryId, {
           q: query || undefined,
           minRating: rating || undefined,
           sortBy: sort,
+          ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
         });
         setProviders(results);
       } finally {
@@ -68,22 +71,44 @@ export function ProviderList({
     [categoryId],
   );
 
+  function requestLocation() {
+    if (!navigator.geolocation) { setGeoStatus("denied"); return; }
+    setGeoStatus("loading");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setUserCoords(coords);
+        setGeoStatus("active");
+        fetch(q, minRating, sortBy, coords);
+      },
+      () => setGeoStatus("denied"),
+      { timeout: 10000 },
+    );
+  }
+
+  function clearLocation() {
+    setUserCoords(null);
+    setGeoStatus("idle");
+    fetch(q, minRating, sortBy, null);
+  }
+
   // Debounce text search; immediate update for selects
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetch(q, minRating, sortBy), 350);
+    debounceRef.current = setTimeout(() => fetch(q, minRating, sortBy, userCoords), 350);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
-  useEffect(() => { fetch(q, minRating, sortBy); }, [minRating, sortBy, fetch]);  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetch(q, minRating, sortBy, userCoords); }, [minRating, sortBy, fetch]);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const hasFilters = q.trim() || minRating > 0 || sortBy !== "rating_desc";
+  const hasFilters = q.trim() || minRating > 0 || sortBy !== "rating_desc" || geoStatus === "active";
 
   function clearFilters() {
     setQ("");
     setMinRating(0);
     setSortBy("rating_desc");
+    clearLocation();
   }
 
   return (
@@ -120,9 +145,29 @@ export function ProviderList({
           ))}
         </select>
 
+        {geoStatus === "active" ? (
+          <Button size="sm" variant="outline" onClick={clearLocation} className="gap-1.5 text-primary border-primary/40">
+            <Locate className="h-3.5 w-3.5" />
+            Near me
+            <X className="h-3 w-3 opacity-60" />
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={requestLocation}
+            disabled={geoStatus === "loading"}
+            className="gap-1.5 text-muted-foreground"
+            title={geoStatus === "denied" ? "Location access was denied" : "Show providers near you"}
+          >
+            <Locate className="h-3.5 w-3.5" />
+            {geoStatus === "loading" ? "Locating…" : geoStatus === "denied" ? "Location denied" : "Near me"}
+          </Button>
+        )}
+
         {hasFilters && (
           <Button size="sm" variant="ghost" onClick={clearFilters} className="text-muted-foreground gap-1">
-            <X className="h-3.5 w-3.5" /> Clear
+            <X className="h-3.5 w-3.5" /> Clear all
           </Button>
         )}
       </div>
