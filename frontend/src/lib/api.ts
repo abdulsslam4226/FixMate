@@ -12,6 +12,7 @@ import {
   BookingStatus,
   DashboardProfile,
   IdType,
+  Message,
   Notification,
   OnboardedProvider,
   Payment,
@@ -271,6 +272,14 @@ export function markAllNotificationsRead(apiToken: string) {
 
 export function cancelBooking(bookingId: string, apiToken: string) {
   return apiPost<Booking>(`/bookings/${bookingId}/cancel`, {}, apiToken);
+}
+
+export function getBookingMessages(bookingId: string, apiToken: string) {
+  return apiGetAuthed<Message[]>(`/bookings/${bookingId}/messages`, apiToken);
+}
+
+export function sendBookingMessage(bookingId: string, text: string, apiToken: string) {
+  return apiPost<Message>(`/bookings/${bookingId}/messages`, { text }, apiToken);
 }
 
 export function raiseDispute(bookingId: string, reason: string, apiToken: string) {

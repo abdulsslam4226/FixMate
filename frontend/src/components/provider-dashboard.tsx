@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { addPortfolioImage, deletePortfolioImage, updateBookingStatus, updateProviderProfile, uploadPortfolioImage } from "@/lib/api";
+import { MessageThread } from "@/components/message-thread";
 import type {
   BookingStatus,
   DashboardBooking,
@@ -76,10 +77,12 @@ function StatCard({
 function JobCard({
   booking,
   apiToken,
+  currentUserId,
   onUpdated,
 }: {
   booking: DashboardBooking;
   apiToken: string;
+  currentUserId: string;
   onUpdated: (updated: DashboardBooking) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -166,6 +169,15 @@ function JobCard({
         <p className="text-muted-foreground font-mono text-xs">
           Waiting for customer to confirm…
         </p>
+      )}
+
+      {booking.status !== "CANCELLED" && (
+        <MessageThread
+          bookingId={booking.id}
+          currentUserId={currentUserId}
+          apiToken={apiToken}
+          disabled={booking.status === "COMPLETED"}
+        />
       )}
     </div>
   );
@@ -566,7 +578,7 @@ export function ProviderDashboard({
                 Awaiting your response ({pending.length})
               </h2>
               {pending.map((b) => (
-                <JobCard key={b.id} booking={b} apiToken={session.apiToken} onUpdated={handleJobUpdated} />
+                <JobCard key={b.id} booking={b} apiToken={session.apiToken} currentUserId={session.user.id} onUpdated={handleJobUpdated} />
               ))}
             </section>
           )}
@@ -578,7 +590,7 @@ export function ProviderDashboard({
                 In progress ({accepted.length})
               </h2>
               {accepted.map((b) => (
-                <JobCard key={b.id} booking={b} apiToken={session.apiToken} onUpdated={handleJobUpdated} />
+                <JobCard key={b.id} booking={b} apiToken={session.apiToken} currentUserId={session.user.id} onUpdated={handleJobUpdated} />
               ))}
             </section>
           )}
@@ -595,7 +607,7 @@ export function ProviderDashboard({
                 History ({history.length})
               </h2>
               {history.slice(0, 10).map((b) => (
-                <JobCard key={b.id} booking={b} apiToken={session.apiToken} onUpdated={handleJobUpdated} />
+                <JobCard key={b.id} booking={b} apiToken={session.apiToken} currentUserId={session.user.id} onUpdated={handleJobUpdated} />
               ))}
             </section>
           )}

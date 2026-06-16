@@ -152,6 +152,15 @@ export interface ProviderDashboardData {
   stats: DashboardStats;
 }
 
+export interface Message {
+  id: string;
+  bookingId: string;
+  senderId: string;
+  text: string;
+  createdAt: string;
+  sender: { id: string; fullName: string; role: string };
+}
+
 export interface BookingReview {
   id: string;
   rating: number;

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { cancelBooking, confirmBookingComplete, raiseDispute, submitReview, updateBookingStatus } from "@/lib/api";
+import { MessageThread } from "@/components/message-thread";
 import type { Booking, BookingDispute, BookingReview, BookingStatus } from "@/lib/types";
 import type { Session } from "next-auth";
 
@@ -436,6 +437,16 @@ export function BookingList({ bookings, session }: { bookings: Booking[]; sessio
                   <p className="text-muted-foreground text-xs">Admin: {booking.dispute.resolution}</p>
                 )}
               </div>
+            )}
+
+            {/* In-app messaging (all non-cancelled bookings) */}
+            {booking.status !== "CANCELLED" && (
+              <MessageThread
+                bookingId={booking.id}
+                currentUserId={session.user.id}
+                apiToken={session.apiToken}
+                disabled={booking.status === "COMPLETED"}
+              />
             )}
           </CardContent>
         </Card>

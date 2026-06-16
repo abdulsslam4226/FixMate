@@ -66,6 +66,7 @@ model User {
   verificationTokens VerificationToken[]
   disputesRaised    Dispute[]        @relation("DisputeRaisedBy")
   disputesResolved  Dispute[]        @relation("DisputeResolvedBy")
+  messagesSent      Message[]        @relation("MessageSender")
 }
 
 model VerificationToken {
@@ -147,6 +148,7 @@ model Booking {
   review      Review?
   payment     Payment?
   dispute     Dispute?
+  messages    Message[]
 }
 
 model Review {
@@ -199,6 +201,18 @@ model Notification {
   message    String   @db.Text
   isRead     Boolean  @default(false)
   createdAt  DateTime @default(now())
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation("MessageSender", fields: [senderId], references: [id])
+  text      String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([bookingId, createdAt])
 }
 
 model PortfolioImage {
